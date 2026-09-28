@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/">
+  <channel>
+    <title>External News Test</title>
+    <item><guid>news-3</guid><title>External News: latest update</title><link>/article/latest</link><pubDate>Sat, 26 Sep 2026 10:00:00 GMT</pubDate><description><![CDATA[<p>RSS news rendered with the Game Data Linker card layout.</p>]]></description><media:thumbnail url="/cover.svg"/></item>
+    <item><guid>news-2</guid><title>External News: second update</title><link>/article/second</link><pubDate>Fri, 25 Sep 2026 10:00:00 GMT</pubDate><description>Compact card with a missing image.</description></item>
+    <item><guid>news-1</guid><title>External News: third update</title><link>/article/third</link><pubDate>Thu, 24 Sep 2026 10:00:00 GMT</pubDate><description>Third story in the feed.</description></item>
+  </channel>
+</rss>

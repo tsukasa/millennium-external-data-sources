@@ -1,0 +1,22 @@
+{
+  "externalDataSources": "Fuentes de datos externas",
+  "configureFeedHint": "Haga clic con el botón derecho en un juego ajeno a Steam → Propiedades → Fuentes de datos externas para configurar su canal RSS o Atom.",
+  "externalNewsSource": "Fuente externa de noticias",
+  "chooseFeed": "Seleccione un canal RSS o Atom para este juego.",
+  "loading": "Cargando...",
+  "saving": "Guardando...",
+  "clearing": "Eliminando...",
+  "feedSettingsSaved": "Configuración del canal guardada.",
+  "feedSettingsCleared": "Configuración del canal eliminada.",
+  "save": "Guardar",
+  "clear": "Eliminar",
+  "activity": "Actividad",
+  "loadingNews": "Cargando noticias...",
+  "couldNotLoadNews": "No se pudieron cargar las noticias:",
+  "retry": "Reintentar",
+  "noNews": "No hay noticias en este canal.",
+  "news": "Noticias",
+  "enterFeedUrl": "Introduzca una URL de canal HTTP o HTTPS.",
+  "couldNotSaveFeedSource": "No se pudo guardar la fuente del canal.",
+  "couldNotRemoveFeedSource": "No se pudo eliminar la fuente del canal."
+}

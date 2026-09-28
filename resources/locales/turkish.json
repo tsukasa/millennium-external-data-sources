@@ -1,0 +1,22 @@
+{
+  "externalDataSources": "Harici Veri Kaynakları",
+  "configureFeedHint": "Steam dışı bir oyuna sağ tıklayın → Özellikler → Harici Veri Kaynakları yolunu izleyerek RSS veya Atom akışını yapılandırın.",
+  "externalNewsSource": "Harici Haber Kaynağı",
+  "chooseFeed": "Bu oyun için bir RSS veya Atom akışı seçin.",
+  "loading": "Yükleniyor...",
+  "saving": "Kaydediliyor...",
+  "clearing": "Kaldırılıyor...",
+  "feedSettingsSaved": "Akış ayarları kaydedildi.",
+  "feedSettingsCleared": "Akış ayarları kaldırıldı.",
+  "save": "Kaydet",
+  "clear": "Kaldır",
+  "activity": "Etkinlik",
+  "loadingNews": "Haberler yükleniyor...",
+  "couldNotLoadNews": "Haberler yüklenemedi:",
+  "retry": "Yeniden dene",
+  "noNews": "Bu akışta haber yok.",
+  "news": "Haberler",
+  "enterFeedUrl": "HTTP veya HTTPS akış URL'si girin.",
+  "couldNotSaveFeedSource": "Akış kaynağı kaydedilemedi.",
+  "couldNotRemoveFeedSource": "Akış kaynağı kaldırılamadı."
+}

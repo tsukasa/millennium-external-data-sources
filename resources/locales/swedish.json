@@ -1,0 +1,22 @@
+{
+  "externalDataSources": "Externa datakällor",
+  "configureFeedHint": "Högerklicka på ett spel utanför Steam → Egenskaper → Externa datakällor för att konfigurera spelets RSS- eller Atom-flöde.",
+  "externalNewsSource": "Extern nyhetskälla",
+  "chooseFeed": "Välj ett RSS- eller Atom-flöde för det här spelet.",
+  "loading": "Läser in...",
+  "saving": "Sparar...",
+  "clearing": "Tar bort...",
+  "feedSettingsSaved": "Flödesinställningarna har sparats.",
+  "feedSettingsCleared": "Flödesinställningarna har tagits bort.",
+  "save": "Spara",
+  "clear": "Ta bort",
+  "activity": "Aktivitet",
+  "loadingNews": "Läser in nyheter...",
+  "couldNotLoadNews": "Det gick inte att läsa in nyheter:",
+  "retry": "Försök igen",
+  "noNews": "Det finns inga nyheter i det här flödet.",
+  "news": "Nyheter",
+  "enterFeedUrl": "Ange en HTTP- eller HTTPS-URL för flödet.",
+  "couldNotSaveFeedSource": "Det gick inte att spara flödeskällan.",
+  "couldNotRemoveFeedSource": "Det gick inte att ta bort flödeskällan."
+}

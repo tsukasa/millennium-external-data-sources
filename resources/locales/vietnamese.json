@@ -1,0 +1,22 @@
+{
+  "externalDataSources": "Nguồn dữ liệu bên ngoài",
+  "configureFeedHint": "Nhấp chuột phải vào trò chơi không thuộc Steam → Thuộc tính → Nguồn dữ liệu bên ngoài để thiết lập nguồn cấp RSS hoặc Atom.",
+  "externalNewsSource": "Nguồn tin tức bên ngoài",
+  "chooseFeed": "Chọn nguồn cấp RSS hoặc Atom cho trò chơi này.",
+  "loading": "Đang tải...",
+  "saving": "Đang lưu...",
+  "clearing": "Đang xóa...",
+  "feedSettingsSaved": "Đã lưu cài đặt nguồn cấp.",
+  "feedSettingsCleared": "Đã xóa cài đặt nguồn cấp.",
+  "save": "Lưu",
+  "clear": "Xóa",
+  "activity": "Hoạt động",
+  "loadingNews": "Đang tải tin tức...",
+  "couldNotLoadNews": "Không thể tải tin tức:",
+  "retry": "Thử lại",
+  "noNews": "Không có tin tức trong nguồn cấp này.",
+  "news": "Tin tức",
+  "enterFeedUrl": "Nhập URL nguồn cấp HTTP hoặc HTTPS.",
+  "couldNotSaveFeedSource": "Không thể lưu nguồn cấp.",
+  "couldNotRemoveFeedSource": "Không thể xóa nguồn cấp."
+}

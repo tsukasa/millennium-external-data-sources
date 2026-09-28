@@ -1,0 +1,22 @@
+{
+  "externalDataSources": "Sumber Data Eksternal",
+  "configureFeedHint": "Klik kanan game non-Steam → Properti → Sumber Data Eksternal untuk mengatur umpan RSS atau Atom-nya.",
+  "externalNewsSource": "Sumber Berita Eksternal",
+  "chooseFeed": "Pilih umpan RSS atau Atom untuk game ini.",
+  "loading": "Memuat...",
+  "saving": "Menyimpan...",
+  "clearing": "Menghapus...",
+  "feedSettingsSaved": "Pengaturan umpan berhasil disimpan.",
+  "feedSettingsCleared": "Pengaturan umpan berhasil dihapus.",
+  "save": "Simpan",
+  "clear": "Hapus",
+  "activity": "Aktivitas",
+  "loadingNews": "Memuat berita...",
+  "couldNotLoadNews": "Berita tidak dapat dimuat:",
+  "retry": "Coba lagi",
+  "noNews": "Tidak ada berita dalam umpan ini.",
+  "news": "Berita",
+  "enterFeedUrl": "Masukkan URL umpan HTTP atau HTTPS.",
+  "couldNotSaveFeedSource": "Sumber umpan tidak dapat disimpan.",
+  "couldNotRemoveFeedSource": "Sumber umpan tidak dapat dihapus."
+}

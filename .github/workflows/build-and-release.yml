@@ -1,0 +1,64 @@
+name: Build and release
+
+on:
+  push:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Build plugin
+        run: |
+          bun install --frozen-lockfile
+          bun run build
+          test -s dist/io.tsukasa.millennium.external-data-sources.star
+
+      - name: Save build artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: external-data-sources-${{ github.run_id }}
+          path: dist/io.tsukasa.millennium.external-data-sources.star
+          if-no-files-found: error
+
+      - name: Publish version release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        shell: bash
+        run: |
+          if [[ ! "$TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "Skipping release for non-version tag: $TAG"
+            exit 0
+          fi
+
+          previous_tag=""
+          while IFS= read -r candidate; do
+            if [[ "$candidate" == "$TAG" ]]; then
+              break
+            fi
+            previous_tag="$candidate"
+          done < <(git tag --merged "$TAG" --list 'v*' |
+            grep -E '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$' |
+            sort -V)
+
+          if [[ -n "$previous_tag" ]]; then
+            git log --format='- %s (%h)' "$previous_tag..$TAG" > release-notes.md
+          else
+            git log --format='- %s (%h)' "$TAG" > release-notes.md
+          fi
+
+          gh release create "$TAG" \
+            dist/io.tsukasa.millennium.external-data-sources.star \
+            --verify-tag \
+            --title "External Data Sources Plugin $TAG" \
+            --notes-file release-notes.md

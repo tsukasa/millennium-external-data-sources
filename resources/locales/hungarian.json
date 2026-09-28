@@ -1,0 +1,22 @@
+{
+  "externalDataSources": "Külső adatforrások",
+  "configureFeedHint": "Kattintson jobb gombbal egy Steamen kívüli játékra → Tulajdonságok → Külső adatforrások, majd állítsa be az RSS- vagy Atom-hírcsatornáját.",
+  "externalNewsSource": "Külső hírforrás",
+  "chooseFeed": "Válasszon RSS- vagy Atom-hírcsatornát ehhez a játékhoz.",
+  "loading": "Betöltés...",
+  "saving": "Mentés...",
+  "clearing": "Eltávolítás...",
+  "feedSettingsSaved": "A hírcsatorna beállításai mentve.",
+  "feedSettingsCleared": "A hírcsatorna beállításai eltávolítva.",
+  "save": "Mentés",
+  "clear": "Eltávolítás",
+  "activity": "Tevékenység",
+  "loadingNews": "Hírek betöltése...",
+  "couldNotLoadNews": "A híreket nem sikerült betölteni:",
+  "retry": "Újrapróbálás",
+  "noNews": "Nincsenek hírek ebben a hírcsatornában.",
+  "news": "Hírek",
+  "enterFeedUrl": "Adjon meg egy HTTP- vagy HTTPS-című hírcsatornát.",
+  "couldNotSaveFeedSource": "A hírcsatorna forrását nem sikerült menteni.",
+  "couldNotRemoveFeedSource": "A hírcsatorna forrását nem sikerült eltávolítani."
+}

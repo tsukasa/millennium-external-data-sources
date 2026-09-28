@@ -1,0 +1,22 @@
+{
+  "externalDataSources": "Eksterne datakilder",
+  "configureFeedHint": "Højreklik på et spil uden for Steam → Egenskaber → Eksterne datakilder for at konfigurere spillets RSS- eller Atom-feed.",
+  "externalNewsSource": "Ekstern nyhedskilde",
+  "chooseFeed": "Vælg et RSS- eller Atom-feed til dette spil.",
+  "loading": "Indlæser...",
+  "saving": "Gemmer...",
+  "clearing": "Fjerner...",
+  "feedSettingsSaved": "Feedindstillingerne er gemt.",
+  "feedSettingsCleared": "Feedindstillingerne er fjernet.",
+  "save": "Gem",
+  "clear": "Fjern",
+  "activity": "Aktivitet",
+  "loadingNews": "Indlæser nyheder...",
+  "couldNotLoadNews": "Nyhederne kunne ikke indlæses:",
+  "retry": "Prøv igen",
+  "noNews": "Der er ingen nyheder i dette feed.",
+  "news": "Nyheder",
+  "enterFeedUrl": "Indtast en HTTP- eller HTTPS-URL til feedet.",
+  "couldNotSaveFeedSource": "Feedkilden kunne ikke gemmes.",
+  "couldNotRemoveFeedSource": "Feedkilden kunne ikke fjernes."
+}

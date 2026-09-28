@@ -1,0 +1,22 @@
+{
+  "externalDataSources": "Внешние источники данных",
+  "configureFeedHint": "Нажмите правой кнопкой мыши на игру не из Steam → Свойства → Внешние источники данных, чтобы настроить её RSS- или Atom-ленту.",
+  "externalNewsSource": "Внешний источник новостей",
+  "chooseFeed": "Выберите RSS- или Atom-ленту для этой игры.",
+  "loading": "Загрузка...",
+  "saving": "Сохранение...",
+  "clearing": "Удаление...",
+  "feedSettingsSaved": "Настройки ленты сохранены.",
+  "feedSettingsCleared": "Настройки ленты удалены.",
+  "save": "Сохранить",
+  "clear": "Удалить",
+  "activity": "Активность",
+  "loadingNews": "Загрузка новостей...",
+  "couldNotLoadNews": "Не удалось загрузить новости:",
+  "retry": "Повторить",
+  "noNews": "В этой ленте нет новостей.",
+  "news": "Новости",
+  "enterFeedUrl": "Введите URL-адрес ленты HTTP или HTTPS.",
+  "couldNotSaveFeedSource": "Не удалось сохранить источник ленты.",
+  "couldNotRemoveFeedSource": "Не удалось удалить источник ленты."
+}

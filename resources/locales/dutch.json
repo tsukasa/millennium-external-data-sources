@@ -1,0 +1,22 @@
+{
+  "externalDataSources": "Externe gegevensbronnen",
+  "configureFeedHint": "Klik met de rechtermuisknop op een niet-Steam-spel → Eigenschappen → Externe gegevensbronnen om de RSS- of Atom-feed in te stellen.",
+  "externalNewsSource": "Externe nieuwsbron",
+  "chooseFeed": "Kies een RSS- of Atom-feed voor dit spel.",
+  "loading": "Laden...",
+  "saving": "Opslaan...",
+  "clearing": "Verwijderen...",
+  "feedSettingsSaved": "Feedinstellingen opgeslagen.",
+  "feedSettingsCleared": "Feedinstellingen verwijderd.",
+  "save": "Opslaan",
+  "clear": "Verwijderen",
+  "activity": "Activiteit",
+  "loadingNews": "Nieuws laden...",
+  "couldNotLoadNews": "Nieuws kon niet worden geladen:",
+  "retry": "Opnieuw proberen",
+  "noNews": "Deze feed bevat geen nieuws.",
+  "news": "Nieuws",
+  "enterFeedUrl": "Voer een HTTP- of HTTPS-URL voor de feed in.",
+  "couldNotSaveFeedSource": "Feedbron kon niet worden opgeslagen.",
+  "couldNotRemoveFeedSource": "Feedbron kon niet worden verwijderd."
+}

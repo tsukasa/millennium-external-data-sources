@@ -1,0 +1,22 @@
+{
+  "externalDataSources": "外部資料來源",
+  "configureFeedHint": "在非 Steam 遊戲上按一下滑鼠右鍵 → 內容 → 外部資料來源，以設定其 RSS 或 Atom 訂閱來源。",
+  "externalNewsSource": "外部新聞來源",
+  "chooseFeed": "請為此遊戲選擇 RSS 或 Atom 訂閱來源。",
+  "loading": "載入中...",
+  "saving": "儲存中...",
+  "clearing": "清除中...",
+  "feedSettingsSaved": "訂閱來源設定已儲存。",
+  "feedSettingsCleared": "訂閱來源設定已清除。",
+  "save": "儲存",
+  "clear": "清除",
+  "activity": "動態",
+  "loadingNews": "正在載入新聞...",
+  "couldNotLoadNews": "無法載入新聞：",
+  "retry": "重試",
+  "noNews": "此訂閱來源沒有新聞。",
+  "news": "新聞",
+  "enterFeedUrl": "請輸入 HTTP 或 HTTPS 訂閱來源網址。",
+  "couldNotSaveFeedSource": "無法儲存訂閱來源。",
+  "couldNotRemoveFeedSource": "無法移除訂閱來源。"
+}

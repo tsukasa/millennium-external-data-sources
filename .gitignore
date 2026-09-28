@@ -1,0 +1,6 @@
+.cache/
+.millennium/
+.millennium/lsp/
+dist/
+node_modules/
+resources/locales.json

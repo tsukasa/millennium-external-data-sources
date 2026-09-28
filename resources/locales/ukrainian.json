@@ -1,0 +1,22 @@
+{
+  "externalDataSources": "Зовнішні джерела даних",
+  "configureFeedHint": "Клацніть правою кнопкою миші на гру поза Steam → Властивості → Зовнішні джерела даних, щоб налаштувати її RSS- або Atom-стрічку.",
+  "externalNewsSource": "Зовнішнє джерело новин",
+  "chooseFeed": "Виберіть RSS- або Atom-стрічку для цієї гри.",
+  "loading": "Завантаження...",
+  "saving": "Збереження...",
+  "clearing": "Видалення...",
+  "feedSettingsSaved": "Налаштування стрічки збережено.",
+  "feedSettingsCleared": "Налаштування стрічки видалено.",
+  "save": "Зберегти",
+  "clear": "Видалити",
+  "activity": "Активність",
+  "loadingNews": "Завантаження новин...",
+  "couldNotLoadNews": "Не вдалося завантажити новини:",
+  "retry": "Спробувати ще раз",
+  "noNews": "У цій стрічці немає новин.",
+  "news": "Новини",
+  "enterFeedUrl": "Введіть URL-адресу стрічки HTTP або HTTPS.",
+  "couldNotSaveFeedSource": "Не вдалося зберегти джерело стрічки.",
+  "couldNotRemoveFeedSource": "Не вдалося видалити джерело стрічки."
+}

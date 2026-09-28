@@ -1,0 +1,22 @@
+{
+  "externalDataSources": "外部数据源",
+  "configureFeedHint": "右键单击非 Steam 游戏 → 属性 → 外部数据源，以配置其 RSS 或 Atom 订阅源。",
+  "externalNewsSource": "外部新闻源",
+  "chooseFeed": "请为此游戏选择 RSS 或 Atom 订阅源。",
+  "loading": "正在加载...",
+  "saving": "正在保存...",
+  "clearing": "正在清除...",
+  "feedSettingsSaved": "订阅源设置已保存。",
+  "feedSettingsCleared": "订阅源设置已清除。",
+  "save": "保存",
+  "clear": "清除",
+  "activity": "活动",
+  "loadingNews": "正在加载新闻...",
+  "couldNotLoadNews": "无法加载新闻：",
+  "retry": "重试",
+  "noNews": "此订阅源没有新闻。",
+  "news": "新闻",
+  "enterFeedUrl": "请输入 HTTP 或 HTTPS 订阅源 URL。",
+  "couldNotSaveFeedSource": "无法保存订阅源。",
+  "couldNotRemoveFeedSource": "无法移除订阅源。"
+}

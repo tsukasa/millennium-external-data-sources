@@ -1,0 +1,22 @@
+{
+  "externalDataSources": "Sources de données externes",
+  "configureFeedHint": "Cliquez avec le bouton droit sur un jeu non-Steam → Propriétés → Sources de données externes pour configurer son flux RSS ou Atom.",
+  "externalNewsSource": "Source d’actualités externe",
+  "chooseFeed": "Choisissez un flux RSS ou Atom pour ce jeu.",
+  "loading": "Chargement...",
+  "saving": "Enregistrement...",
+  "clearing": "Suppression...",
+  "feedSettingsSaved": "Paramètres du flux enregistrés.",
+  "feedSettingsCleared": "Paramètres du flux supprimés.",
+  "save": "Enregistrer",
+  "clear": "Supprimer",
+  "activity": "Activité",
+  "loadingNews": "Chargement des actualités...",
+  "couldNotLoadNews": "Impossible de charger les actualités :",
+  "retry": "Réessayer",
+  "noNews": "Aucune actualité dans ce flux.",
+  "news": "Actualités",
+  "enterFeedUrl": "Saisissez l’URL HTTP ou HTTPS d’un flux.",
+  "couldNotSaveFeedSource": "Impossible d’enregistrer la source du flux.",
+  "couldNotRemoveFeedSource": "Impossible de supprimer la source du flux."
+}

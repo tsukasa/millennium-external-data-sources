@@ -1,0 +1,22 @@
+{
+  "externalDataSources": "Ulkoiset tietolähteet",
+  "configureFeedHint": "Määritä muun kuin Steam-pelin RSS- tai Atom-syöte napsauttamalla peliä hiiren kakkospainikkeella ja valitsemalla Ominaisuudet → Ulkoiset tietolähteet.",
+  "externalNewsSource": "Ulkoinen uutislähde",
+  "chooseFeed": "Valitse tälle pelille RSS- tai Atom-syöte.",
+  "loading": "Ladataan...",
+  "saving": "Tallennetaan...",
+  "clearing": "Poistetaan...",
+  "feedSettingsSaved": "Syötteen asetukset tallennettu.",
+  "feedSettingsCleared": "Syötteen asetukset poistettu.",
+  "save": "Tallenna",
+  "clear": "Poista",
+  "activity": "Toiminta",
+  "loadingNews": "Ladataan uutisia...",
+  "couldNotLoadNews": "Uutisia ei voitu ladata:",
+  "retry": "Yritä uudelleen",
+  "noNews": "Tässä syötteessä ei ole uutisia.",
+  "news": "Uutiset",
+  "enterFeedUrl": "Anna syötteen HTTP- tai HTTPS-osoite.",
+  "couldNotSaveFeedSource": "Syötelähdettä ei voitu tallentaa.",
+  "couldNotRemoveFeedSource": "Syötelähdettä ei voitu poistaa."
+}

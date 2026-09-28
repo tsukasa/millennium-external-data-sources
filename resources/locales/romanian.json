@@ -1,0 +1,22 @@
+{
+  "externalDataSources": "Surse externe de date",
+  "configureFeedHint": "Faceți clic dreapta pe un joc non-Steam → Proprietăți → Surse externe de date pentru a configura fluxul RSS sau Atom al acestuia.",
+  "externalNewsSource": "Sursă externă de știri",
+  "chooseFeed": "Selectați un flux RSS sau Atom pentru acest joc.",
+  "loading": "Se încarcă...",
+  "saving": "Se salvează...",
+  "clearing": "Se elimină...",
+  "feedSettingsSaved": "Setările fluxului au fost salvate.",
+  "feedSettingsCleared": "Setările fluxului au fost eliminate.",
+  "save": "Salvare",
+  "clear": "Eliminare",
+  "activity": "Activitate",
+  "loadingNews": "Se încarcă știrile...",
+  "couldNotLoadNews": "Știrile nu au putut fi încărcate:",
+  "retry": "Încercați din nou",
+  "noNews": "Nu există știri în acest flux.",
+  "news": "Știri",
+  "enterFeedUrl": "Introduceți un URL de flux HTTP sau HTTPS.",
+  "couldNotSaveFeedSource": "Sursa fluxului nu a putut fi salvată.",
+  "couldNotRemoveFeedSource": "Sursa fluxului nu a putut fi eliminată."
+}

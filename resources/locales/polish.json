@@ -1,0 +1,22 @@
+{
+  "externalDataSources": "Zewnętrzne źródła danych",
+  "configureFeedHint": "Kliknij prawym przyciskiem myszy grę spoza Steam → Właściwości → Zewnętrzne źródła danych, aby skonfigurować jej kanał RSS lub Atom.",
+  "externalNewsSource": "Zewnętrzne źródło wiadomości",
+  "chooseFeed": "Wybierz kanał RSS lub Atom dla tej gry.",
+  "loading": "Wczytywanie...",
+  "saving": "Zapisywanie...",
+  "clearing": "Usuwanie...",
+  "feedSettingsSaved": "Ustawienia kanału zapisano.",
+  "feedSettingsCleared": "Ustawienia kanału usunięto.",
+  "save": "Zapisz",
+  "clear": "Usuń",
+  "activity": "Aktywność",
+  "loadingNews": "Wczytywanie wiadomości...",
+  "couldNotLoadNews": "Nie udało się wczytać wiadomości:",
+  "retry": "Spróbuj ponownie",
+  "noNews": "W tym kanale nie ma wiadomości.",
+  "news": "Wiadomości",
+  "enterFeedUrl": "Podaj adres URL kanału HTTP lub HTTPS.",
+  "couldNotSaveFeedSource": "Nie udało się zapisać źródła kanału.",
+  "couldNotRemoveFeedSource": "Nie udało się usunąć źródła kanału."
+}

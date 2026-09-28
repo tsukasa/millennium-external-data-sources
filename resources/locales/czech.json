@@ -1,0 +1,22 @@
+{
+  "externalDataSources": "Externí zdroje dat",
+  "configureFeedHint": "Klikněte pravým tlačítkem na hru mimo Steam → Vlastnosti → Externí zdroje dat a nastavte její kanál RSS nebo Atom.",
+  "externalNewsSource": "Externí zdroj zpráv",
+  "chooseFeed": "Vyberte pro tuto hru kanál RSS nebo Atom.",
+  "loading": "Načítání...",
+  "saving": "Ukládání...",
+  "clearing": "Odstraňování...",
+  "feedSettingsSaved": "Nastavení kanálu bylo uloženo.",
+  "feedSettingsCleared": "Nastavení kanálu bylo odstraněno.",
+  "save": "Uložit",
+  "clear": "Odstranit",
+  "activity": "Aktivita",
+  "loadingNews": "Načítání zpráv...",
+  "couldNotLoadNews": "Zprávy se nepodařilo načíst:",
+  "retry": "Zkusit znovu",
+  "noNews": "V tomto kanálu nejsou žádné zprávy.",
+  "news": "Zprávy",
+  "enterFeedUrl": "Zadejte adresu URL kanálu HTTP nebo HTTPS.",
+  "couldNotSaveFeedSource": "Zdroj kanálu se nepodařilo uložit.",
+  "couldNotRemoveFeedSource": "Zdroj kanálu se nepodařilo odstranit."
+}

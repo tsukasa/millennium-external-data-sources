@@ -1,0 +1,22 @@
+{
+  "externalDataSources": "Sumber Data Luaran",
+  "configureFeedHint": "Klik kanan permainan bukan Steam → Sifat → Sumber Data Luaran untuk menetapkan suapan RSS atau Atom permainan tersebut.",
+  "externalNewsSource": "Sumber Berita Luaran",
+  "chooseFeed": "Pilih suapan RSS atau Atom untuk permainan ini.",
+  "loading": "Memuatkan...",
+  "saving": "Menyimpan...",
+  "clearing": "Mengalih keluar...",
+  "feedSettingsSaved": "Tetapan suapan telah disimpan.",
+  "feedSettingsCleared": "Tetapan suapan telah dialih keluar.",
+  "save": "Simpan",
+  "clear": "Alih keluar",
+  "activity": "Aktiviti",
+  "loadingNews": "Memuatkan berita...",
+  "couldNotLoadNews": "Berita tidak dapat dimuatkan:",
+  "retry": "Cuba lagi",
+  "noNews": "Tiada berita dalam suapan ini.",
+  "news": "Berita",
+  "enterFeedUrl": "Masukkan URL suapan HTTP atau HTTPS.",
+  "couldNotSaveFeedSource": "Sumber suapan tidak dapat disimpan.",
+  "couldNotRemoveFeedSource": "Sumber suapan tidak dapat dialih keluar."
+}

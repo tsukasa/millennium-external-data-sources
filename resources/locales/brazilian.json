@@ -1,0 +1,22 @@
+{
+  "externalDataSources": "Fontes de dados externas",
+  "configureFeedHint": "Clique com o botão direito em um jogo não Steam → Propriedades → Fontes de dados externas para configurar seu feed RSS ou Atom.",
+  "externalNewsSource": "Fonte externa de notícias",
+  "chooseFeed": "Selecione um feed RSS ou Atom para este jogo.",
+  "loading": "Carregando...",
+  "saving": "Salvando...",
+  "clearing": "Removendo...",
+  "feedSettingsSaved": "Configurações do feed salvas.",
+  "feedSettingsCleared": "Configurações do feed removidas.",
+  "save": "Salvar",
+  "clear": "Remover",
+  "activity": "Atividade",
+  "loadingNews": "Carregando notícias...",
+  "couldNotLoadNews": "Não foi possível carregar as notícias:",
+  "retry": "Tentar novamente",
+  "noNews": "Não há notícias neste feed.",
+  "news": "Notícias",
+  "enterFeedUrl": "Insira uma URL de feed HTTP ou HTTPS.",
+  "couldNotSaveFeedSource": "Não foi possível salvar a fonte do feed.",
+  "couldNotRemoveFeedSource": "Não foi possível remover a fonte do feed."
+}
