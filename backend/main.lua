@@ -8,5 +8,5 @@ return {
 
     on_unload = function()
         --- Unused ---
-    end,
+    end
 }

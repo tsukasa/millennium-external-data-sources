@@ -1,31 +1,23 @@
-import { decodeResponse } from './transport';
+import type { NewsItem } from './types';
 
-/** Normalized input for the news-card renderer. */
-export interface NewsItem {
-  gid: string;
-  title: string;
-  url: string;
-  contents: string;
-  date: number | null;
-  feedlabel?: string;
-  image?: string;
-}
-
-/** Returns direct child elements with the given local name. */
+/**
+ * Returns direct child elements with the given local name.
+ */
 const children = (element: Element, name: string) => Array.from(element.children).filter(child => child.localName === name);
 
-/** Returns the first direct child element with the given local name. */
+/**
+ * Returns the first direct child element with the given local name.
+ */
 const child = (element: Element, name: string) => children(element, name)[0];
 
-/** Returns trimmed text from the first matching direct child element. */
+/**
+ * Returns trimmed text from the first matching direct child element.
+ */
 const text = (element: Element, name: string) => child(element, name)?.textContent?.trim() || '';
 
-
-/*****************************************************************************/
-/* Helper Functions                                                          */
-/*****************************************************************************/
-
-/** Resolves inherited xml:base attributes from the feed root through an element. */
+/**
+ * Resolves inherited xml:base attributes from the feed root through an element.
+ */
 function baseUrl(element: Element, source: string): string {
   const chain: Element[] = [];
 
@@ -35,7 +27,7 @@ function baseUrl(element: Element, source: string): string {
 
   for (const node of chain) {
     const base = node.getAttributeNS('http://www.w3.org/XML/1998/namespace', 'base');
-    
+
     if (base)
       source = httpUrl(base, source) || source;
   }
@@ -43,17 +35,24 @@ function baseUrl(element: Element, source: string): string {
   return source;
 }
 
-/** Extracts visible text from an HTML fragment and normalizes whitespace. */
+/**
+ * Extracts visible text from an HTML fragment and normalizes whitespace.
+ */
 function plainText(value: string, parser: DOMParser): string {
-  const html = parser.parseFromString(value, 'text/html');
-  html.querySelectorAll('script,style,iframe,object').forEach(node => node.remove());
-  return (html.body.textContent || '').replace(/\s+/g, ' ').trim();
+  return documentText(parser.parseFromString(value, 'text/html'));
 }
 
+/**
+ * Extracts visible text from an HTML document and normalizes whitespace.
+ */
+function documentText(html: Document): string {
+  html.querySelectorAll('script,style,iframe,object')
+    .forEach(node => node.remove());
 
-/*****************************************************************************/
-/* Functions                                                                 */
-/*****************************************************************************/
+  return (html.body.textContent || '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
 
 /**
  * Resolves a URL and accepts only HTTP or HTTPS destinations.
@@ -81,24 +80,23 @@ export function httpUrl(value: string, base?: string): string | undefined {
  */
 export function parseFeed(xml: string, source: string, parser = new DOMParser()): NewsItem[] {
   const doc = parser.parseFromString(xml, 'application/xml');
-  
+
   if (doc.getElementsByTagName('parsererror').length)
     throw new Error('Invalid feed XML');
-  
+
   const root = doc.documentElement;
   const atom = root?.localName === 'feed' && root.namespaceURI === 'http://www.w3.org/2005/Atom';
   const channel = root?.localName === 'rss' ? child(root, 'channel') : undefined;
-  
+
   if (!atom && !channel)
     throw new Error('Expected an RSS 2.0 or Atom 1.0 feed');
-  
+
   const container = atom ? root : channel!;
   const entries = children(container, atom ? 'entry' : 'item');
-  const label = plainText(text(container, 'title'), parser);
   const ids = new Set<string>();
   const urls = new Set<string>();
   const items: NewsItem[] = [];
-  
+
   for (const entry of entries) {
     const link = atom
       ? children(entry, 'link').find(node => !node.getAttribute('rel') || node.getAttribute('rel') === 'alternate')
@@ -155,68 +153,11 @@ export function parseFeed(xml: string, source: string, parser = new DOMParser())
       gid,
       url,
       title: plainText(text(entry, 'title'), parser) || 'Untitled',
-      contents: plainText(rawContent, parser),
+      contents: documentText(html),
       date: Number.isFinite(timestamp) ? timestamp / 1000 : null,
-      feedlabel: label || 'News', image
+      image
     });
   }
 
   return items.sort((a, b) => (b.date ?? -Infinity) - (a.date ?? -Infinity));
-}
-
-/** Fetches and caches parsed feeds by URL for ten minutes, sharing in-flight requests. */
-export class FeedCache {
-  private entries = new Map<string, { time: number; items: NewsItem[] }>();
-  private pending = new Map<string, Promise<NewsItem[]>>();
-
-  /**
-   * @param fetcher Fetches the raw response for an app ID.
-   * @param now Clock used to determine cache expiration.
-   */
-  constructor(private fetcher: (appId: string) => Promise<string>, private now = Date.now) {}
-
-  /** Removes the cached entry and pending request for a feed URL. */
-  invalidate(url: string) { this.entries.delete(url); this.pending.delete(url); }
-
-  /** Removes all cached entries and pending requests. */
-  clear() { this.entries.clear(); this.pending.clear(); }
-
-  /**
-   * Returns news items for a feed, fetching and parsing them when the cache expires.
-   * @param appId App ID passed to the fetcher.
-   * @param url Expected feed URL and cache key.
-   * @throws If the response URL differs from the requested feed URL.
-   */
-  get(appId: string, url: string): Promise<NewsItem[]> {
-    const cached = this.entries.get(url);
-
-    if (cached && this.now() - cached.time < 600_000)
-      return Promise.resolve(cached.items);
-
-    const pending = this.pending.get(url);
-
-    if (pending)
-      return pending;
-
-    const request = this.fetcher(appId).then(raw => {
-      const response = decodeResponse<{ url: string; xml: string }>(raw);
-
-      if (response.url !== url)
-        throw new Error('Feed source changed during request');
-
-      const items = parseFeed(response.xml, response.url);
-      
-      if (this.pending.get(url) === request)
-        this.entries.set(url, { time: this.now(), items });
-
-      return items;
-    }).finally(() => {
-      if (this.pending.get(url) === request)
-        this.pending.delete(url);
-    });
-
-    this.pending.set(url, request);
-
-    return request;
-  }
 }

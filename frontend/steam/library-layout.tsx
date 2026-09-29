@@ -1,30 +1,37 @@
 import { cloneElement, isValidElement, useSyncExternalStore, type ComponentType, type ReactNode } from 'react';
-import { NewsSection } from '../components/news-section';
-import type { NativeNews } from '../native/news';
-import { isNonSteamId } from '../steam';
-import type { Sources } from '../sources';
+import { isNonSteamId, type AppOverview } from './client';
+import type { FeedManager } from '../feed/manager';
 
-/** CSS class names used to locate the relevant columns in Steam's library layout. */
 export interface LayoutClasses {
   LeftColumn: string;
-  ColumnContainer: string
+  ColumnContainer: string;
 }
 
-/** Props passed to Steam's library layout renderer. */
 export interface LayoutProps {
-  overview: { appid: number };
-  parentComponent: { RegisterSection(name: string, element: HTMLElement | null): void };
+  overview: Pick<AppOverview, 'appid'>;
+  parentComponent: SectionRegistrar;
   setSections: Set<string>;
 }
 
 export type LayoutRenderer = (props: LayoutProps) => ReactNode;
 
-export type SeekTarget = ComponentType<{ name: string; parent: LayoutProps['parentComponent']; children?: ReactNode }>;
+export interface SectionRegistrar {
+  RegisterSection(name: string, element: HTMLElement | null): void;
+}
 
+export interface SeekTargetProps {
+  name: string;
+  parent: SectionRegistrar;
+  children?: ReactNode;
+}
 
-/*****************************************************************************/
-/* Functions                                                                 */
-/*****************************************************************************/
+interface LayoutElementProps {
+  className?: string;
+  name?: string;
+  children?: ReactNode;
+}
+
+export type SeekTarget = ComponentType<SeekTargetProps>;
 
 /**
  * Wraps Steam's library layout renderer to show external news for configured
@@ -32,16 +39,17 @@ export type SeekTarget = ComponentType<{ name: string; parent: LayoutProps['pare
  * @param original Steam's original library layout renderer.
  * @param Seek Component used by Steam to register layout sections.
  * @param classes CSS class names for the library columns.
- * @param sources External news sources and their change notifications.
+ * @param feedManager Feed configuration and change notifications.
  * @returns A renderer that adds the external news section when applicable.
  */
-export function createLibraryLayout(original: LayoutRenderer, Seek: SeekTarget, classes: LayoutClasses, sources: Sources, native: NativeNews): LayoutRenderer {
-  const subscribe = (notify: () => void) => sources.subscribe(notify);
-  const snapshot = () => sources.revision;
+export function createLibraryLayout(original: LayoutRenderer, Seek: SeekTarget, classes: LayoutClasses, feedManager: FeedManager): LayoutRenderer {
+  const subscribe = (notify: () => void) => feedManager.subscribe(notify);
+  const snapshot = () => feedManager.revision;
 
   return function ExternalLibraryLayout(props) {
-    const revision = useSyncExternalStore(subscribe, snapshot);
-    const appId = String(props.overview.appid), url = sources.values[appId];
+    useSyncExternalStore(subscribe, snapshot);
+    const appId = String(props.overview.appid);
+    const url = feedManager.values[appId];
     const enabled = !!url && isNonSteamId(props.overview.appid) && props.setSections.has('nonsteam');
 
     // Let Steam create its own SeekTargets. The source-backed sections are
@@ -57,7 +65,7 @@ export function createLibraryLayout(original: LayoutRenderer, Seek: SeekTarget, 
       if (Array.isArray(node))
         return node.map(child => visit(child, inLeftColumn));
 
-      if (!isValidElement<{ className?: string; name?: string; children?: ReactNode }>(node))
+      if (!isValidElement<LayoutElementProps>(node))
         return node;
 
       // Steam's renderer tree includes elements whose className is not a
@@ -73,17 +81,6 @@ export function createLibraryLayout(original: LayoutRenderer, Seek: SeekTarget, 
 
       if (inLeftColumn && node.type === Seek && node.props.name === 'activityrollup')
         return cloneElement(node, undefined, null);
-
-      if (inLeftColumn && node.type === Seek && node.props.name === 'activity')
-        return cloneElement(node, undefined, (
-          <NewsSection
-            key={`${appId}\n${url}`}
-            appId={appId}
-            url={url!}
-            sources={sources}
-            native={native}
-            revision={revision} />
-        ));
 
       let children = node.props.children;
 
@@ -106,14 +103,14 @@ export function createLibraryLayout(original: LayoutRenderer, Seek: SeekTarget, 
 
       if (hasClass(classes.ColumnContainer))
         return cloneElement(node, {
-          key: `${node.key || 'columns'}:${url ? 'with-external-news' : 'without-external-news'}`
+          key: `${node.key || 'columns'}:with-external-news`
         }, ...nextChildren);
 
       return children === node.props.children
         ? node
         : cloneElement(node, undefined, ...nextChildren);
     };
-    
+
     return visit(tree);
   };
 }

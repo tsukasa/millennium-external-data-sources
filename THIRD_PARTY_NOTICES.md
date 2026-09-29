@@ -1,8 +1,8 @@
 # Source attribution
 
 The news card structure, Steam CSS fallback classes, localization anchors, and
-library layout/insertion approach are ported from the adjacent `game-data-linker`
-source by retrotoolsdev-wq, copyright 2026, under the MIT license:
+library layout/insertion approach was originally inspired from the adjacent
+`game-data-linker` source by retrotoolsdev-wq, copyright 2026, under the MIT license:
 
 ```
     MIT License
@@ -32,8 +32,8 @@ Homepage: https://github.com/retrotoolsdev-wq/game-data-linker/
 
 
 
-The guarded app-properties page registration and properties form layout are
-adapted from the adjacent `steam-non-steam-playtimes` source, particularly
+The guarded app-properties page registration and properties form layouts were
+originally adapted from the adjacent `steam-non-steam-playtimes` source, particularly
 `frontend/renderers/app-properties.tsx` and `frontend/components/playtime-input.tsx`.
 That project's source tree does not contain a separate license file.
 

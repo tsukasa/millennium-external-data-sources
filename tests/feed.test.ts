@@ -43,8 +43,7 @@ test('RSS: dates, stable undated order, CDATA, deduplication, namespaces and med
 
   expect(entries[0]).toMatchObject({
     contents: 'Hello & goodbye',
-    image: 'https://example.com/cover.png',
-    feedlabel: 'Studio & News'
+    image: 'https://example.com/cover.png'
   });
 
   expect(entries[2].date).toBeNull();

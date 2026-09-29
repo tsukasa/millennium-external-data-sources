@@ -1,55 +1,95 @@
 import { definePlugin, IconsModule } from 'millennium';
 import { initI18n, getPluginI18nString } from './i18n';
-import { registerProperties } from './properties';
-import { registerLibrary } from './library';
-import { activeAppId, steam } from './steam';
-import { Sources } from './sources';
-import { registerShortcutRemoval } from './shortcuts';
+import { registerProperties } from './steam/properties';
+import { registerLibrary } from './steam/library';
+import { activeAppId, steam } from './steam/client';
+import { FeedManager } from './feed/manager';
+import { ReleaseDateManager } from './release-date/manager';
+import { registerReleaseDates } from './steam/release-date-store';
+import { registerShortcutRemoval } from './steam/shortcut-removal';
+import { PluginConfiguration } from './components/plugin-configuration';
 
 /**
- * Initializes localization and data sources, then registers the plugin's Steam
+ * Initializes localization and data managers, then registers the plugin's Steam
  * integrations once the required window managers are available.
  */
 export default definePlugin(async () => {
   await initI18n();
-  const sources = new Sources();
-  let stopped = false;
+
+  let pluginStopped = false;
+
+  const feedManager = new FeedManager();
+  const releaseDates = new ReleaseDateManager();
+
   const cleanups: (() => void)[] = [];
-  const timer = setInterval(() => {
-    if (stopped || !steam().MainWindowBrowserManager || !steam().g_PopupManager) return;
-    clearInterval(timer);
+
+  const initializationTimer = setInterval(() => {
+    if (pluginStopped || !steam().MainWindowBrowserManager || !steam().g_PopupManager)
+      return;
+
+    clearInterval(initializationTimer);
+
+    let feedManagerLoading: Promise<void>;
+    let releaseDateLoading: Promise<void>;
+
     try {
-      sources
-        .load()
-        .then(() => {
-          if (!stopped) {
-            cleanups.push(registerShortcutRemoval(sources));
-            void sources.prefetchConfigured(activeAppId());
-          }
-        })
-        .catch(error => console.error('[External Data Sources] Could not load configuration', error));
-      cleanups.push(registerProperties(sources));
-      cleanups.push(registerLibrary(sources));
+      feedManagerLoading = feedManager.load();
+      releaseDateLoading = releaseDates.load();
     } catch (error) {
-      cleanups
-        .splice(0)
-        .reverse()
-        .forEach(cleanup => cleanup());
-      console.error('[External Data Sources] Initialization failed', error);
+      console.error('[External Data Sources] Initialization of managers failed', error);
+      return;
     }
+
+    void Promise.allSettled([feedManagerLoading, releaseDateLoading]).then(() => {
+      if (!pluginStopped)
+        register('Shortcut removal', () => registerShortcutRemoval(feedManager, releaseDates));
+    });
+
+    void feedManagerLoading
+      .then(() => {
+        if (!pluginStopped)
+          feedManager.startBackgroundRefresh(activeAppId());
+      })
+      .catch(error => console.error('[External Data Sources] Could not load configuration', error)
+    );
+
+    void releaseDateLoading
+      .catch(error => console.error('[External Data Sources] Could not load release dates', error));
+
+    register('Library', () => registerLibrary(feedManager));
+    register('Release dates', () => registerReleaseDates(releaseDates));
+    register('Properties', () => registerProperties(feedManager, releaseDates));
   }, 250);
+
+  const register = (name: string, install: () => () => void) => {
+    try {
+      cleanups.push(install());
+    } catch (error) {
+      console.error(`[External Data Sources] ${name} initialization failed`, error);
+    }
+  };
 
   return {
     title: getPluginI18nString('externalDataSources'),
     icon: <IconsModule.Settings />,
-    content: (
-      <div>
-        {getPluginI18nString('configureFeedHint')}
-      </div>
-    ),
-    /** Stops initialization and releases all registered integrations and sources. */
-    onDismount() {
-      stopped = true; clearInterval(timer); cleanups.reverse().forEach(cleanup => cleanup()); sources.dispose();
+    content: <PluginConfiguration feedManager={feedManager} />,
+    onDismount: () => {
+      if (pluginStopped)
+        return;
+
+      pluginStopped = true;
+      clearInterval(initializationTimer);
+
+      for (const currentCleanupFunc of cleanups.splice(0).reverse()) {
+        try {
+          currentCleanupFunc();
+        } catch (error) {
+          console.error('[External Data Sources] Cleanup failed', error);
+        }
+      }
+
+      feedManager.dispose();
+      releaseDates.dispose();
     },
   };
 });
