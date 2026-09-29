@@ -1,5 +1,5 @@
 import { Component, useEffect, useState, type ReactNode } from 'react';
-import { appDetailsButtonClasses } from '../classes';
+import { feedClasses } from '../classes';
 import type { NewsItem } from '../feed';
 import { getPluginI18nString } from '../i18n';
 import type { NativeNews } from '../native/news';
@@ -22,8 +22,7 @@ export function NewsSection({ appId, url, sources, revision, native }: {
   const [state, setState] = useState<FeedState>();
   const [attempt, setAttempt] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
-  const buttonClasses = appDetailsButtonClasses();
-  const actionClass = `${buttonClasses.AppDetailsButton} AppDetailsButton ${buttonClasses.BottomRight} BottomRight DialogButton _DialogLayout Secondary Focusable`;
+  const actionClass = `${feedClasses().ViewLastNews} Panel`;
   useEffect(() => {
     let current = true;
     setState(previous => previous?.items ? { items: previous.items } : undefined);
@@ -39,17 +38,23 @@ export function NewsSection({ appId, url, sources, revision, native }: {
   }, [appId, url, sources, revision, attempt]);
 
   const refresh = () => {
-    if (refreshing) return;
+    if (refreshing || !state) return;
     sources.cache.invalidate(url);
     setRefreshing(true);
     setAttempt(value => value + 1);
   };
 
   return <NewsBoundary key={`${appId}:${url}:${revision}`}>
-    <native.Section appId={appId} action={<button type="button" className={actionClass}
-      disabled={refreshing || !state} onClick={refresh}>
-      {refreshing || !state ? getPluginI18nString('loading') : loc('AppActivity_ViewLatestNews', 'View Latest News')}
-    </button>}>
+    <native.Section appId={appId} action={<div className={actionClass} role="button"
+      tabIndex={refreshing || !state ? -1 : 0} aria-disabled={refreshing || !state}
+      onClick={refresh} onKeyDown={event => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          refresh();
+        }
+      }}>
+      <span>{loc('AppActivity_ViewLatestNews', 'View Latest News')}</span>
+    </div>}>
       {!state && <div role="status">{getPluginI18nString('loadingNews')}</div>}
       {state?.error !== undefined && <div role="alert">
         {getPluginI18nString('couldNotLoadNews')} {state.error}

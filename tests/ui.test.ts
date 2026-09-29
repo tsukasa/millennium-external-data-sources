@@ -257,22 +257,24 @@ test('Activity refresh bypasses the feed cache and keeps cards visible while loa
     await act(async () => { root.render(h(NewsSection, { appId: id, url, sources, revision: 0, native })); await tick(); });
     expect(document.querySelector('[data-external-news]')?.textContent).toContain('First article');
     expect(fetches).toEqual([id]);
-    expect(document.querySelector<HTMLButtonElement>('[data-native-action] button')?.className).toBe(
-      '_3Cdin80d-hVsakHUZboheb AppDetailsButton _3nJyYxGQ3kdwwabPmxNnMe BottomRight DialogButton _DialogLayout Secondary Focusable');
-    expect(document.querySelector<HTMLButtonElement>('[data-native-action] button')?.textContent).toBe('View Latest News');
+    const action = document.querySelector<HTMLElement>('[data-native-action] [role="button"]');
+    expect(action?.className).toBe('_1EC1xjjUGqI7fqX6PVzJA3 Panel');
+    expect(action?.querySelector('span')?.textContent).toBe('View Latest News');
     const firstCard = document.querySelector('[data-external-news] > div:last-child > div');
     expect(firstCard).not.toBeNull();
 
-    await act(async () => document.querySelector<HTMLButtonElement>('[data-native-action] button')!.click());
+    await act(async () => action!.click());
     expect(fetches).toEqual([id, id]);
     expect(document.querySelector('[data-external-news]')?.textContent).toContain('First article');
     expect(document.querySelector('[data-external-news] > div:last-child > div')).toBe(firstCard);
-    expect(document.querySelector<HTMLButtonElement>('[data-native-action] button')?.disabled).toBe(true);
+    expect(action?.getAttribute('aria-disabled')).toBe('true');
+    expect(action?.tabIndex).toBe(-1);
 
     await act(async () => { finishRefresh(response('Updated article')); await tick(); });
     expect(document.querySelector('[data-external-news]')?.textContent).toContain('Updated article');
     expect(document.querySelector('[data-external-news]')?.textContent).not.toContain('First article');
-    expect(document.querySelector<HTMLButtonElement>('[data-native-action] button')?.disabled).toBe(false);
+    expect(action?.getAttribute('aria-disabled')).toBe('false');
+    expect(action?.tabIndex).toBe(0);
   } finally {
     await act(async () => root.unmount());
     api.fetchFeed = original;
