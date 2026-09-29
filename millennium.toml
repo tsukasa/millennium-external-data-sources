@@ -2,7 +2,7 @@
 id = "io.tsukasa.millennium.external-data-sources"
 name = "External Data Sources"
 author = "tsukasa"
-version = "0.0.2"
+version = "0.0.5"
 description = "Adds external data sources like RSS and Atom news for non-Steam games."
 
 [assets]
