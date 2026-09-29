@@ -46,6 +46,7 @@ class Announcement extends Component<any> {
 }
 function NativeEvent(_props: any): never { return forbidden(); }
 function NativeFeed(_props: any): never { return forbidden(); }
+class PostTextEntry extends Component { render() { return forbidden(); } }
 class Day extends Component<any> {
   render() {
     return <div data-native-day aria-labelledby={this.props.labelId}>
@@ -54,8 +55,15 @@ class Day extends Component<any> {
     </div>;
   }
 }
+function InnerContainer({ children }: { children: import('react').ReactNode }) {
+  // Like Steam's component, this intentionally does not forward style props.
+  return <div data-native-container>{children}</div>;
+}
 class Section extends Component<any> {
-  render() { return <section data-native-section><h2>Native activity</h2><NativeFeed ShowMoreContent={forbidden} /></section>; }
+  render() { return <section data-native-section><h2>Native activity</h2>
+    <InnerContainer>{this.props.showTextBox && <PostTextEntry />}
+      <NativeFeed ShowMoreContent={forbidden} /></InnerContainer>
+  </section>; }
 }
 // Steam's MobX observer replaces render with a non-writable instance method.
 // A subclass override alone works once and silently stops adapting on updates.
@@ -70,7 +78,8 @@ function Panel({ onActivate, children }: any) { return <button onClick={onActiva
 const clients: QueryClient[] = [];
 const QueryContext = createContext<QueryClient | null>(null);
 const bindings: NativeBindings = {
-  Section, Day, Days: ({ rgDays }: any) => <div data-native-days>{rgDays.map((day: any) => <Day key={day.key} day={day} />)}</div>,
+  Section, PostTextEntry, postTextEntryClassName: 'native-post-entry Panel',
+  Day, Days: ({ rgDays }: any) => <div data-native-days>{rgDays.map((day: any) => <Day key={day.key} day={day} />)}</div>,
   Announcement, Loader, Rating, Visibility, Summary, eventClassName: 'native-event', EventModel, ActivityEvent,
   Card: ({ event }: any) => {
     const client = useContext(QueryContext);
@@ -114,10 +123,18 @@ test('native render methods run while Steam loaders, votes, impressions and inte
   const native = createNativeNews(bindings);
   const root = createRoot(document.body);
   let items = [article('a', 1700000000), article('b', null, { title: '<img onerror=alert(1)>' })];
-  const render = () => <native.Section appId="3900360037"><native.Feed appId="3900360037" items={items} /></native.Section>;
+  const render = () => <native.Section appId="3900360037" action={<button type="button">Refresh</button>}>
+    <native.Feed appId="3900360037" items={items} />
+  </native.Section>;
   try {
     await act(async () => root.render(render()));
     expect(document.querySelectorAll('[data-native-section]')).toHaveLength(1);
+    expect(document.querySelector<HTMLElement>('.native-post-entry')?.style.height).toBe('64px');
+    expect(document.querySelector<HTMLElement>('.native-post-entry')?.style.position).toBe('relative');
+    expect(document.querySelector<HTMLElement>('.native-post-entry')?.style.padding).toBe('0px');
+    expect(document.querySelector<HTMLElement>('.native-post-entry > div')?.style.right).toBe('10px');
+    expect(document.querySelector('.native-post-entry button')?.textContent).toBe('Refresh');
+    expect(document.querySelector('textarea')).toBeNull();
     expect(document.querySelectorAll('[data-native-days]')).toHaveLength(1);
     expect(document.querySelectorAll('[data-native-day]')).toHaveLength(2);
     expect(document.querySelectorAll('h4')).toHaveLength(1);
@@ -146,6 +163,15 @@ test('native render methods run while Steam loaders, votes, impressions and inte
     expect(document.body.textContent).toContain('Refreshed native article');
     expect(previousClient.cleared).toBe(true);
     expect(clients[clients.length - 1]?.cleared).toBe(false);
+    class ChangedSection extends Component<any> {
+      render() { return <section data-changed-section><NativeFeed ShowMoreContent={forbidden} /></section>; }
+    }
+    const changed = createNativeNews({ ...bindings, Section: ChangedSection });
+    await act(async () => root.render(<changed.Section appId="3900360037">
+      <changed.Feed appId="3900360037" items={items} />
+    </changed.Section>));
+    expect(document.querySelector('[data-changed-section]')?.textContent).toContain('Refreshed native article');
+    expect(document.querySelectorAll('[data-native-summary]')).toHaveLength(2);
   } finally { await act(async () => root.unmount()); }
   expect(clients[clients.length - 1]?.cleared).toBe(true);
 });

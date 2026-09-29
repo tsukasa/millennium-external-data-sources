@@ -79,6 +79,11 @@ export const SECTION_HEADER_CLASSES_FALLBACK: CssClasses = {
   LabelText: '_3i0kopAostOz2IDi9HqmeN',
 };
 
+export const APP_DETAILS_BUTTON_CLASSES_FALLBACK: CssClasses = {
+  AppDetailsButton: '_3Cdin80d-hVsakHUZboheb',
+  BottomRight: '_3nJyYxGQ3kdwwabPmxNnMe',
+};
+
 
 /*****************************************************************************/
 /* Helper Functions                                                          */
@@ -181,5 +186,22 @@ export function sectionHeaderClasses(): CssClasses {
     );
   } catch {
     return SECTION_HEADER_CLASSES_FALLBACK;
+  }
+}
+
+/**
+ * Match the native library's secondary action buttons, such as New Note.
+ */
+export function appDetailsButtonClasses(): CssClasses {
+  try {
+    return withFallback(
+      APP_DETAILS_BUTTON_CLASSES_FALLBACK,
+      findClassModule(m =>
+        m.AppDetailsButton &&
+        m.BottomRight
+      )
+    );
+  } catch {
+    return APP_DETAILS_BUTTON_CLASSES_FALLBACK;
   }
 }

@@ -23,11 +23,13 @@ mock.module('millennium', () => ({
 const { Sources } = await import('../frontend/sources');
 const { registerShortcutRemoval } = await import('../frontend/shortcuts');
 const { createLibraryLayout } = await import('../frontend/renderers/library-layout');
+const { NewsSection } = await import('../frontend/components/news-section');
 const { registerProperties, PLUGIN_PROPERTIES_ROUTE: NEWS_ROUTE } = await import('../frontend/properties');
 const { initI18n, getPluginI18nString } = await import('../frontend/i18n');
 
 const native = {
-  Section: ({ appId, children }: { appId: string; children: import('react').ReactNode }) => h('div', { 'data-external-news': appId }, children),
+  Section: ({ appId, children, action }: { appId: string; children: import('react').ReactNode; action?: import('react').ReactNode }) =>
+    h('div', { 'data-external-news': appId }, h('div', { 'data-native-action': true }, action), children),
   Feed: ({ items }: { appId: string; items: import('../frontend/feed').NewsItem[] }) => h('div', null, items.map(item => h('div', { key: item.gid }, item.title))),
 };
 
@@ -234,4 +236,45 @@ test('React news ignores stale results after navigation and retries failed reque
     expect(document.querySelector('[data-external-news]')).toBeNull();
     expect(document.querySelector('.SeekTarget')).toBeNull();
   } finally { await act(async () => root.unmount()); }
+});
+
+test('Activity refresh bypasses the feed cache and keeps cards visible while loading', async () => {
+  document.body.replaceChildren();
+  const sources = new Sources();
+  const fetches: string[] = [];
+  let finishRefresh!: (value: string) => void;
+  const refreshRequest = new Promise<string>(resolve => { finishRefresh = resolve; });
+  const response = (title: string) => JSON.stringify({ url,
+    xml: `<rss><channel><item><title>${title}</title><link>https://example.com/article</link></item></channel></rss>` });
+  const api = (globalThis as any).backend;
+  const original = api.fetchFeed;
+  api.fetchFeed = (appId: string) => {
+    fetches.push(appId);
+    return fetches.length === 1 ? Promise.resolve(response('First article')) : refreshRequest;
+  };
+  const root = createRoot(document.body);
+  try {
+    await act(async () => { root.render(h(NewsSection, { appId: id, url, sources, revision: 0, native })); await tick(); });
+    expect(document.querySelector('[data-external-news]')?.textContent).toContain('First article');
+    expect(fetches).toEqual([id]);
+    expect(document.querySelector<HTMLButtonElement>('[data-native-action] button')?.className).toBe(
+      '_3Cdin80d-hVsakHUZboheb AppDetailsButton _3nJyYxGQ3kdwwabPmxNnMe BottomRight DialogButton _DialogLayout Secondary Focusable');
+    expect(document.querySelector<HTMLButtonElement>('[data-native-action] button')?.textContent).toBe('View Latest News');
+    const firstCard = document.querySelector('[data-external-news] > div:last-child > div');
+    expect(firstCard).not.toBeNull();
+
+    await act(async () => document.querySelector<HTMLButtonElement>('[data-native-action] button')!.click());
+    expect(fetches).toEqual([id, id]);
+    expect(document.querySelector('[data-external-news]')?.textContent).toContain('First article');
+    expect(document.querySelector('[data-external-news] > div:last-child > div')).toBe(firstCard);
+    expect(document.querySelector<HTMLButtonElement>('[data-native-action] button')?.disabled).toBe(true);
+
+    await act(async () => { finishRefresh(response('Updated article')); await tick(); });
+    expect(document.querySelector('[data-external-news]')?.textContent).toContain('Updated article');
+    expect(document.querySelector('[data-external-news]')?.textContent).not.toContain('First article');
+    expect(document.querySelector<HTMLButtonElement>('[data-native-action] button')?.disabled).toBe(false);
+  } finally {
+    await act(async () => root.unmount());
+    api.fetchFeed = original;
+  }
 });

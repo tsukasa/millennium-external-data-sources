@@ -5,6 +5,8 @@ import type { ComponentClass } from 'react';
 // elements: webpack IDs and minified function names change between client builds.
 export interface NativeBindings {
   Section: ComponentClass<any>;
+  PostTextEntry: ComponentClass<any>;
+  postTextEntryClassName: string;
   Day: ComponentClass<any>;
   Days: any;
   Announcement: ComponentClass<any>;
@@ -103,8 +105,14 @@ export function discoverNativeNews(): NativeBindings {
       useSyncExternalStore: (_subscribe: any, snapshot: () => any) => snapshot(),
       useId: () => ':external-news-discovery:',
     });
-    const section = Activity({ appid: 0, showTextBox: false });
-    const feed = requireElement(render(section), node => typeof node.props.ShowMoreContent === 'function');
+    const section = Activity({ appid: 0, showTextBox: true });
+    const sectionTree = render(section);
+    const postTextEntry = requireElement(sectionTree, node =>
+      typeof node.props.OnPostClicked === 'function' && typeof node.props.placeholder === 'string');
+    const postTextEntryTree = render(postTextEntry);
+    if (typeof postTextEntryTree.props.className !== 'string')
+      throw new Error('Steam activity text box structure changed');
+    const feed = requireElement(sectionTree, node => typeof node.props.ShowMoreContent === 'function');
     const days = requireElement(render(feed), node => node.props.rgDays);
     const dayWrapper = requireElement(render(days), node => node.props.day === day);
     const dayElement = render(dayWrapper);
@@ -129,7 +137,9 @@ export function discoverNativeNews(): NativeBindings {
     if (!imageQueryKey || typeof imageQueryKey[3] !== 'number')
       throw new Error('Steam news image query changed');
     return {
-      Section: section.type, Day: dayElement.type, Days: days.type, Announcement: announcement.type,
+      Section: section.type, PostTextEntry: postTextEntry.type,
+      postTextEntryClassName: `${postTextEntryTree.props.className} Panel`,
+      Day: dayElement.type, Days: days.type, Announcement: announcement.type,
       Loader: loader.type, Card: card.type, Summary: summary.type, Rating: rating.type,
       Visibility: cardTree.type, eventClassName: announcement.props.className,
       EventModel, ActivityEvent, QueryClient: sharedClient.constructor, QueryProvider,

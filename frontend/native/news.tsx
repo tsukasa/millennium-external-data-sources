@@ -4,7 +4,7 @@ import { openArticle, steam } from '../steam';
 import type { NativeBindings } from './discovery';
 
 export interface NativeNews {
-  Section: ComponentType<{ appId: string; children: ReactNode }>;
+  Section: ComponentType<{ appId: string; children: ReactNode; action?: ReactNode }>;
   Feed: ComponentType<{ appId: string; items: NewsItem[] }>;
 }
 
@@ -81,7 +81,15 @@ export function createActivityDays(native: NativeBindings, appId: string, items:
 export function createNativeNews(native: NativeBindings): NativeNews {
   let nextFeed = 0;
   const Section = adaptClass(native.Section, (tree, props) => {
-    const content = mapElements(tree, node => typeof node.props.ShowMoreContent === 'function' ? props.children : node);
+    const content = mapElements(tree, node => node.type === native.PostTextEntry
+      // Keep Steam's native activity panel styling, but never mount its input,
+      // event handlers, or post controls for an external shortcut.
+      ? <div className={native.postTextEntryClassName} style={{ position: 'relative', height: 64, padding: 0 }}>
+          <div style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)' }}>
+            {props.action}
+          </div>
+        </div>
+      : typeof node.props.ShowMoreContent === 'function' ? props.children : node);
     return cloneElement(content, { className: `${content.props.className} external-news-section` });
   });
 
@@ -143,8 +151,8 @@ export function createNativeNews(native: NativeBindings): NativeNews {
   }
 
   return {
-    Section: ({ appId, children }) => createElement(Section, {
-      appid: Number(appId), showTextBox: false, nDaysToDisplay: 1, setDaysToDisplay: () => {}, children,
+    Section: ({ appId, children, action }) => createElement(Section, {
+      appid: Number(appId), showTextBox: true, nDaysToDisplay: 1, setDaysToDisplay: () => {}, children, action,
     }),
     Feed: function Feed({ appId, items }) {
       const state = useMemo(() => {
