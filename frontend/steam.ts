@@ -20,9 +20,12 @@ export interface SteamGlobals {
   };
 
   appStore?: {
-    allApps?: {
-      appid: number
-    }[]
+    allApps?: { appid: number }[]
+    GetAppOverviewByAppID?(appId: number): unknown
+  };
+
+  appDetailsStore?: {
+    GetHeroImages?(app: unknown): { rgHeroImages: string[] }
   };
 
   g_PopupManager?: {

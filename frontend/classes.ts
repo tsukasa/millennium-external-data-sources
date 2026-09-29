@@ -79,7 +79,6 @@ export const SECTION_HEADER_CLASSES_FALLBACK: CssClasses = {
   LabelText: '_3i0kopAostOz2IDi9HqmeN',
 };
 
-
 /*****************************************************************************/
 /* Helper Functions                                                          */
 /*****************************************************************************/

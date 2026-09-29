@@ -2,6 +2,8 @@ import { findClassModule, findModule, getReactInstance } from 'millennium';
 import { createLibraryLayout, type LayoutRenderer, type SeekTarget } from './renderers/library-layout';
 import { steam } from './steam';
 import type { Sources } from './sources';
+import { discoverNativeNews } from './native/discovery';
+import { createNativeNews } from './native/news';
 
 interface LayoutContext {
   _currentValue: LayoutRenderer;
@@ -88,11 +90,22 @@ function refreshOpenLayout() {
 
 export function registerLibrary(sources: Sources): () => void {
   let restore: (() => void) | undefined;
+  let discoveryError: string | undefined;
   const install = () => {
     const bindings = findBindings();
 
     if (!bindings)
       return false;
+
+    let native;
+    try {
+      native = createNativeNews(discoverNativeNews());
+    } catch (error) {
+      const message = String(error);
+      if (message !== discoveryError) console.error('[External Data Sources] Native news discovery failed:', error);
+      discoveryError = message;
+      return false;
+    }
 
     const { layoutClass, context, seek, classes } = bindings;
     const original = context._currentValue, original2 = context._currentValue2 || original;
@@ -108,8 +121,8 @@ export function registerLibrary(sources: Sources): () => void {
       return sections;
     };
 
-    const layout = createLibraryLayout(original, seek, classes, sources);
-    const layout2 = original2 === original ? layout : createLibraryLayout(original2, seek, classes, sources);
+    const layout = createLibraryLayout(original, seek, classes, sources, native);
+    const layout2 = original2 === original ? layout : createLibraryLayout(original2, seek, classes, sources, native);
 
     // Steam exposes its default renderer through this context. Native providers
     // retain precedence; both React renderer slots are restored on unload.

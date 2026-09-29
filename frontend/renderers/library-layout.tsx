@@ -1,5 +1,6 @@
 import { cloneElement, isValidElement, useSyncExternalStore, type ComponentType, type ReactNode } from 'react';
 import { NewsSection } from '../components/news-section';
+import type { NativeNews } from '../native/news';
 import { isNonSteamId } from '../steam';
 import type { Sources } from '../sources';
 
@@ -34,7 +35,7 @@ export type SeekTarget = ComponentType<{ name: string; parent: LayoutProps['pare
  * @param sources External news sources and their change notifications.
  * @returns A renderer that adds the external news section when applicable.
  */
-export function createLibraryLayout(original: LayoutRenderer, Seek: SeekTarget, classes: LayoutClasses, sources: Sources): LayoutRenderer {
+export function createLibraryLayout(original: LayoutRenderer, Seek: SeekTarget, classes: LayoutClasses, sources: Sources, native: NativeNews): LayoutRenderer {
   const subscribe = (notify: () => void) => sources.subscribe(notify);
   const snapshot = () => sources.revision;
 
@@ -80,6 +81,7 @@ export function createLibraryLayout(original: LayoutRenderer, Seek: SeekTarget, 
             appId={appId}
             url={url!}
             sources={sources}
+            native={native}
             revision={revision} />
         ));
 

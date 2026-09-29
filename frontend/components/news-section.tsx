@@ -1,77 +1,91 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { appSectionClasses, feedClasses, sectionHeaderClasses } from '../classes';
+import { Component, useEffect, useState, type ReactNode } from 'react';
+import { feedClasses } from '../classes';
 import type { NewsItem } from '../feed';
 import { getPluginI18nString } from '../i18n';
-import { observeNewsSummaries, renderNewsFeed } from '../news';
-import { loc } from '../steam';
+import type { NativeNews } from '../native/news';
 import type { Sources } from '../sources';
+import { loc } from '../steam';
 
-type FeedState = { items: NewsItem[]; error?: never } | { error: string; items?: never } | undefined;
+const newsImageStyle = `.external-news-section img.PartnerEventMediumImage_Image {
+  aspect-ratio: 16 / 9;
+  height: auto;
+  object-fit: cover;
+}`;
 
-export function NewsSection({ appId, url, sources, revision }: {
-  appId: string; url: string; sources: Sources; revision: number;
+type FeedState = { items?: NewsItem[]; error?: string } | undefined;
+
+class NewsBoundary extends Component<{ children: ReactNode }, { error?: string }> {
+  state: { error?: string } = {};
+  static getDerivedStateFromError(error: Error) { return { error: error.message }; }
+  render() {
+    return this.state.error ? (
+      <div role="alert">
+        {getPluginI18nString('couldNotLoadNews')}
+        {this.state.error}
+      </div>
+    ) : this.props.children;
+  }
+}
+
+function ViewLatestNewsAction({ disabled, onRefresh }: { disabled: boolean; onRefresh: () => void }) {
+  return (
+    <div className={`${feedClasses().ViewLastNews} Panel`}
+      role="button"
+      tabIndex={disabled ? -1 : 0}
+      aria-disabled={disabled}
+      onClick={onRefresh}
+      onKeyDown={event => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        onRefresh();
+      }
+    }}>
+      <span>
+        {loc('AppActivity_ViewLatestNews', 'View Latest News')}
+      </span>
+    </div>
+  );
+}
+
+export function NewsSection({ appId, url, sources, revision, native }: {
+  appId: string; url: string; sources: Sources; revision: number; native: NativeNews;
 }) {
   const [state, setState] = useState<FeedState>();
   const [attempt, setAttempt] = useState(0);
-  const panel = useRef<HTMLDivElement>(null);
-  const section = appSectionClasses(), feed = feedClasses(), header = sectionHeaderClasses();
-  const headingId = `external-news-section-${appId}-heading`;
-
+  const [refreshing, setRefreshing] = useState(false);
   useEffect(() => {
     let current = true;
-    setState(undefined);
+    setState(previous => previous?.items ? { items: previous.items } : undefined);
     sources.cache.get(appId, url).then(items => {
-      if (current) setState({ items });
+      if (current) { setState({ items }); setRefreshing(false); }
     }).catch(error => {
-      if (current) setState({ error: error instanceof Error ? error.message : String(error) });
+      if (current) {
+        setState(previous => ({ items: previous?.items, error: error instanceof Error ? error.message : String(error) }));
+        setRefreshing(false);
+      }
     });
     return () => { current = false; };
   }, [appId, url, sources, revision, attempt]);
 
-  // React owns the section; the existing card renderer owns only this panel.
-  useLayoutEffect(() => {
-    const target = panel.current;
-    if (!target || !state?.items) return;
-    target.replaceChildren(...Array.from(renderNewsFeed(target.ownerDocument, state.items).childNodes));
-    const stop = observeNewsSummaries(target);
-    return () => { stop(); target.replaceChildren(); };
-  }, [state]);
+  const refresh = () => {
+    if (refreshing || !state) return;
+    sources.cache.invalidate(url);
+    setRefreshing(true);
+    setAttempt(value => value + 1);
+  };
 
   return (
-    <div data-external-news={appId}
-      className={`${section.AppDetailsSection} AppDetailsSection ${feed.ActivityFeedContainer} ActivityFeedContainer Panel`}
-      style={{ maxWidth: '65%' }}
-      role="region"
-      aria-labelledby={headingId}>
-
-      <h2 id={headingId} className={`${header.Reset} Reset ${header.PadLeft} PadLeft ${header.SectionHeader} SectionHeader`}>
-        <div className={`${header.Label} Label`}>
-          <div className={`${header.LabelText} LabelText`}>
-            {loc('AppDetails_SectionTitle_Activity', getPluginI18nString('activity'))}
-          </div>
-        </div>
-        <div />
-      </h2>
-
-      <div className={`${section.AppDetailsSectionContainer} AppDetailsSectionContainer ${section.AppDetailsSectionHasLabel} AppDetailsSectionHasLabel Panel`}>
-        <div className={`${section.Body} Body ${section.InnerContainer} InnerContainer`}>
-          {/* Keep the native Activity box and its spacing without a post input. */}
-          <div className={`${feed.PostTextEntryBox} PostTextEntry ${feed.AddToFeed} AddToFeed ${feed.PostTextEntry} PostTextEntry Panel`}
-            aria-hidden="true" inert />
-          {!state && (
-            <div className="Panel"><div role="status">{getPluginI18nString('loadingNews')}</div></div>
-          )}
-          {state?.error !== undefined && (
-            <div className="Panel" role="alert">
-              {getPluginI18nString('couldNotLoadNews')} {state.error}
-              <button className="DialogButton" onClick={() => setAttempt(value => value + 1)}>{getPluginI18nString('retry')}</button>
-            </div>
-          )}
-          {state?.items && (
-            <div className="Panel" ref={panel} />
-          )}
-        </div>
-      </div>
-    </div>
+    <NewsBoundary key={`${appId}:${url}:${revision}`}>
+      <native.Section appId={appId} action={<ViewLatestNewsAction disabled={refreshing || !state} onRefresh={refresh} />}>
+        <style>{newsImageStyle}</style>
+        {!state && <div role="status">{getPluginI18nString('loadingNews')}</div>}
+        {state?.error !== undefined && <div role="alert">
+          {getPluginI18nString('couldNotLoadNews')} {state.error}
+          <button type="button" className="DialogButton" onClick={refresh}>{getPluginI18nString('retry')}</button>
+        </div>}
+        {state?.items && (state.items.length ? <native.Feed appId={appId} items={state.items} />
+          : <div role="status">{getPluginI18nString('noNews')}</div>)}
+      </native.Section>
+    </NewsBoundary>
   );
 }
