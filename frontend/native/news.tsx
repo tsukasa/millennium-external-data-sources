@@ -34,11 +34,24 @@ function adaptClass(Native: ComponentClass<any>, transform: (tree: any, props: a
   return Adapted;
 }
 
+function heroImagesForApp(appId: string): string[] {
+  try {
+    const client = steam();
+    const overview = client.appStore?.GetAppOverviewByAppID?.(Number(appId));
+    return overview ? client.appDetailsStore?.GetHeroImages?.(overview)?.rgHeroImages || [] : [];
+  } catch {
+    // Missing artwork must never prevent the feed itself from rendering.
+    return [];
+  }
+}
+
 /** Models are private to this feed; never register synthetic IDs in Steam's stores. */
-export function createActivityDays(native: NativeBindings, appId: string, items: NewsItem[], client: any) {
+export function createActivityDays(native: NativeBindings, appId: string, items: NewsItem[], client: any, backgroundImages: string[] = []) {
   const groups = new Map<string, any>();
   items.forEach((item, index) => {
     const model = new native.EventModel();
+    const images = item.image ? [item.image] : backgroundImages;
+    const image = images[0];
     // Steam normally generates a short card summary. Supplying the full RSS
     // article here makes its UpdateLineCount repeatedly lay out thousands of
     // characters per card and can stall the library for many seconds.
@@ -51,14 +64,14 @@ export function createActivityDays(native: NativeBindings, appId: string, items:
     model.jsondata = {
       ...model.jsondata,
       localized_summary: Object.assign([], { [native.language]: summary, 0: summary }),
-      localized_capsule_image: Object.assign([], { [native.language]: item.image, 0: item.image }),
+      localized_capsule_image: Object.assign([], { [native.language]: image, 0: image }),
     };
     model.postTime = item.date ?? 0;
     model.rtime32_moderator_reviewed = model.postTime;
     // A fresh, private query result prevents the original image hook's store/clan
     // fallback requests, including for articles without an image.
     client.setQueryData(native.imageQueryKey.map(value => value === native.probeGid ? model.GID : value),
-      item.image ? [item.image] : []);
+      images);
     const event = new native.ActivityEvent(model.postTime, model.clanSteamID, model.GID, model.postTime, appId);
     Object.defineProperty(event, 'eventModel', { value: model });
     event.GetEvent = async () => model;
@@ -156,11 +169,25 @@ export function createNativeNews(native: NativeBindings): NativeNews {
     }),
     Feed: function Feed({ appId, items }) {
       const state = useMemo(() => {
-        const client = new native.QueryClient({ defaultOptions: { queries: {
-          staleTime: Infinity, gcTime: Infinity, retry: false,
-          refetchOnMount: false, refetchOnWindowFocus: false, refetchOnReconnect: false,
-        } } });
-        return { key: ++nextFeed, client, days: createActivityDays(native, appId, items, client) };
+        const client = new native.QueryClient({
+          defaultOptions: {
+            queries: {
+              staleTime: Infinity,
+              gcTime: Infinity,
+              retry: false,
+              refetchOnMount: false,
+              refetchOnWindowFocus: false,
+              refetchOnReconnect: false,
+            }
+          }
+        });
+        // Determine if any of the news items lack an image and prepare background images accordingly.
+        const backgroundImages = items.some(item => !item.image) ? heroImagesForApp(appId) : [];
+        return {
+          key: ++nextFeed,
+          client,
+          days: createActivityDays(native, appId, items, client, backgroundImages)
+        };
       }, [appId, items]);
       useEffect(() => () => state.client.clear(), [state]);
       const days = native.Days({ rgDays: state.days, rollup: false, nMaxItemsToDisplayInLastDay: 0 });

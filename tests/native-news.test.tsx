@@ -113,6 +113,11 @@ test('native models keep card summaries short, isolate image caches and separate
   expect(model.description.get(0)).toBe(contents);
   expect(model.AnnouncementGID).toBeUndefined();
   expect([...client.data.values()]).toEqual([['https://example.com/image.jpg'], [], []]);
+  const background = ['/customimages/3900360037_hero.jpg', '/customimages/3900360037_hero.png'];
+  const withBackground = new QueryClient();
+  const fallbackDays = createActivityDays(bindings, '3900360037', items, withBackground, background);
+  expect([...withBackground.data.values()]).toEqual([['https://example.com/image.jpg'], background, background]);
+  expect(fallbackDays[1].events[0].eventModel.jsondata.localized_capsule_image[0]).toBe(background[0]);
   const other = createActivityDays(bindings, '3900360038', items, new QueryClient());
   expect(other[0].events[0].eventModel.GID).not.toBe(model.GID);
 });
@@ -120,6 +125,12 @@ test('native models keep card summaries short, isolate image caches and separate
 test('native render methods run while Steam loaders, votes, impressions and internal navigation do not', async () => {
   const dom = new JSDOM('<body></body>', { url: 'https://steamloopback.host' });
   Object.assign(globalThis, { window: dom.window, document: dom.window.document, IS_REACT_ACT_ENVIRONMENT: true });
+  const overview = { appid: 3900360037 };
+  const heroImages = ['/customimages/3900360037_hero.jpg', '/customimages/3900360037_hero.png'];
+  Object.assign(dom.window, {
+    appStore: { GetAppOverviewByAppID: (appId: number) => appId === overview.appid ? overview : null },
+    appDetailsStore: { GetHeroImages: (app: unknown) => ({ rgHeroImages: app === overview ? heroImages : [] }) },
+  });
   const native = createNativeNews(bindings);
   const root = createRoot(document.body);
   let items = [article('a', 1700000000), article('b', null, { title: '<img onerror=alert(1)>' })];
@@ -128,6 +139,7 @@ test('native render methods run while Steam loaders, votes, impressions and inte
   </native.Section>;
   try {
     await act(async () => root.render(render()));
+    expect([...clients[clients.length - 1].data.values()]).toEqual([heroImages, heroImages]);
     expect(document.querySelectorAll('[data-native-section]')).toHaveLength(1);
     expect(document.querySelector<HTMLElement>('.native-post-entry')?.style.height).toBe('64px');
     expect(document.querySelector<HTMLElement>('.native-post-entry')?.style.position).toBe('relative');
