@@ -134,10 +134,10 @@ export function parseFeed(xml: string, source: string, parser = new DOMParser())
 
     for (const node of [...media, ...enclosure]) {
       const value = node.getAttribute('url') || node.getAttribute('href');
-      
+
       if (value && (!node.getAttribute('type') || node.getAttribute('type')!.startsWith('image/'))) {
         image = httpUrl(value, baseUrl(node, source));
-        
+
         if (image)
           break;
       }

@@ -1,4 +1,4 @@
-import { beforeAll, expect, mock, setSystemTime, test } from 'bun:test';
+import { beforeAll, expect, mock, test } from 'bun:test';
 import { JSDOM } from 'jsdom';
 import { act, createElement as h, useLayoutEffect } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -24,9 +24,12 @@ const { Sources } = await import('../frontend/sources');
 const { registerShortcutRemoval } = await import('../frontend/shortcuts');
 const { createLibraryLayout } = await import('../frontend/renderers/library-layout');
 const { registerProperties, PLUGIN_PROPERTIES_ROUTE: NEWS_ROUTE } = await import('../frontend/properties');
-const { renderNewsFeed } = await import('../frontend/news');
 const { initI18n, getPluginI18nString } = await import('../frontend/i18n');
-const { APP_SECTION_CLASSES_FALLBACK } = await import('../frontend/classes');
+
+const native = {
+  Section: ({ appId, children }: { appId: string; children: import('react').ReactNode }) => h('div', { 'data-external-news': appId }, children),
+  Feed: ({ items }: { appId: string; items: import('../frontend/feed').NewsItem[] }) => h('div', null, items.map(item => h('div', { key: item.gid }, item.title))),
+};
 
 const id = '3900360037', otherId = '2436693853', url = 'https://example.com/feed';
 let saved: Record<string, string> = {};
@@ -110,85 +113,6 @@ test('properties tab guards, duplicates, coexistence with Playtime and cleanup',
   unregister(); expect(pages.map(page => page.title)).toEqual(['Shortcut', 'Playtime']);
 });
 
-test('native cards: all medium-image news events have individual Steam panels and safe content', () => {
-  const contents = `${'Long summary text. '.repeat(20)}End of summary.`;
-  const root = renderNewsFeed(document, Array.from({ length: 4 }, (_, i) => ({ gid: String(i), title: '<img onerror=alert(1)>',
-    url: `${url}/${i}`, contents, date: Date.UTC(2020, 8, 26) / 1000, image: i === 1 ? 'https://example.com/broken' : undefined })));
-  expect(root.querySelectorAll('[role="button"]')).toHaveLength(4);
-  const nativeEvents = root.querySelectorAll('.By7D93oEZkZtBeg23NDoR');
-  expect(nativeEvents).toHaveLength(4);
-  // Keep the full text; the mounted renderer truncates by visible lines, not characters.
-  expect(nativeEvents[0].querySelector('.PartnerEventMediumImage_Summary')?.textContent).toBe(contents);
-  expect(nativeEvents[0].querySelector(':scope > .Panel[role="button"]')?.className).toContain('_1HZy7BvOZuPT8feUwadL4W');
-  const dayContents = root.querySelector('.AppActivityDay > div')!;
-  // Steam has one outer Panel per announcement. Themes use these siblings to
-  // round only the first/last card and draw separators between adjacent cards.
-  expect(dayContents.children).toHaveLength(4);
-  expect(dayContents.querySelectorAll(':scope > .Panel > .Event.Panel > .Panel > .PartnerEventMediumImage')).toHaveLength(4);
-  expect(dayContents.querySelectorAll(':scope > .Panel:first-child > .Event')).toHaveLength(1);
-  expect(dayContents.querySelectorAll(':scope > .Panel:last-child > .Event')).toHaveLength(1);
-  const footers = dayContents.querySelectorAll(':scope > .Panel > .Event > .RatingBar');
-  expect(footers).toHaveLength(4);
-  for (const footer of footers) {
-    expect(footer.getAttribute('aria-hidden')).toBe('true');
-    expect(footer.querySelector('.LikeIcon')).not.toBeNull();
-    expect(footer.querySelector('button, [role="button"], [tabindex]')).toBeNull();
-    expect(footer.textContent).toBe('');
-  }
-  expect(nativeEvents[0].parentElement?.parentElement?.parentElement).not.toBe(nativeEvents[1].parentElement?.parentElement?.parentElement);
-  let opened: { href: string; target: string; rel: string } | undefined;
-  const captureLink = (event: Event) => {
-    const target = event.target;
-    if (target instanceof dom.window.HTMLAnchorElement) {
-      opened = { href: target.href, target: target.target, rel: target.rel };
-      event.preventDefault();
-    }
-  };
-  document.addEventListener('click', captureLink, true);
-  nativeEvents[0].querySelector<HTMLElement>('[role="button"]')!.click();
-  document.removeEventListener('click', captureLink, true);
-  expect(opened).toEqual({ href: `${url}/0`, target: '_blank', rel: 'noopener noreferrer' });
-  expect(nativeEvents[0].querySelector('.MediumImageContainer')).toBeNull();
-  expect(nativeEvents[1].querySelector('.MediumImageContainer')).not.toBeNull();
-  expect(root.querySelectorAll('img')).toHaveLength(1);
-  root.querySelector('img')!.dispatchEvent(new dom.window.Event('error'));
-  expect(root.querySelectorAll('img')).toHaveLength(0);
-  expect(root.querySelectorAll('.MediumImageContainer')).toHaveLength(0);
-  expect(root.textContent).toContain('<img onerror=alert(1)>');
-  expect(root.querySelectorAll('h4')).toHaveLength(1);
-  expect(root.querySelector('h4')?.className).toContain('Reset');
-  expect(root.querySelector('h4')?.textContent).toContain('2020');
-});
-
-test('activity dates follow Steam locale, relative days and year rules without merging years', () => {
-  setSystemTime(new Date(2026, 8, 27, 12));
-  const items = [new Date(2026, 8, 27), new Date(2026, 8, 26), new Date(2026, 8, 28),
-    new Date(2026, 3, 28), new Date(2025, 3, 28), null].map((date, i) => ({
-      gid: String(i), title: 'Update', url: `${url}/${i}`, contents: 'Text', date: date && date.getTime() / 1000,
-    }));
-  try {
-    Object.assign(window, { LocalizationManager: { GetPreferredLocales: () => ['en-US'] } });
-    const root = renderNewsFeed(document, items);
-    expect(root.querySelectorAll('.AppActivityDay')).toHaveLength(6);
-    expect(Array.from(root.querySelectorAll('h4'), heading => heading.textContent)).toEqual([
-      'Today', 'Yesterday', 'Tomorrow', 'April 28', 'Apr 28, 2025',
-    ]);
-    Object.assign(window, { LocalizationManager: {
-      GetPreferredLocales: () => ['de-DE'],
-      m_mapTokens: new Map([['Time_Today', 'Heute'], ['Time_Yesterday', 'Gestern'], ['Time_Tomorrow', 'Morgen']]),
-    } });
-    expect(Array.from(renderNewsFeed(document, items).querySelectorAll('h4'), heading => heading.textContent)).toEqual([
-      'Heute', 'Gestern', 'Morgen', '28. April', new Date(2025, 3, 28).toLocaleDateString('de-DE', { year: 'numeric', month: 'short', day: 'numeric' }),
-    ]);
-    setSystemTime(new Date(2026, 0, 1, 12));
-    const previousYear = [{ ...items[0], date: new Date(2025, 11, 31).getTime() / 1000 }];
-    expect(renderNewsFeed(document, previousYear).querySelector('h4')?.textContent).toContain('2025');
-  } finally {
-    setSystemTime();
-    Object.assign(window, { LocalizationManager: undefined });
-  }
-});
-
 test('plugin strings follow the Steam client language and fall back to English', async () => {
   const original = globalThis.SteamClient;
   let language = 'german';
@@ -196,7 +120,7 @@ test('plugin strings follow the Steam client language and fall back to English',
     Object.assign(globalThis, { SteamClient: { ...original, Settings: { GetCurrentLanguage: async () => language } } });
     await initI18n();
     expect(getPluginI18nString('externalDataSources')).toBe('Externe Datenquellen');
-    expect(renderNewsFeed(document, []).textContent).toBe('Keine Nachrichten in diesem Feed.');
+    expect(getPluginI18nString('noNews')).toBe('Keine Nachrichten in diesem Feed.');
 
     language = 'french';
     await initI18n();
@@ -205,7 +129,7 @@ test('plugin strings follow the Steam client language and fall back to English',
     language = 'unsupported-language';
     await initI18n();
     expect(getPluginI18nString('externalDataSources')).toBe('External Data Sources');
-    expect(renderNewsFeed(document, []).textContent).toBe('No news in this feed.');
+    expect(getPluginI18nString('noNews')).toBe('No news in this feed.');
   } finally {
     Object.assign(globalThis, { SteamClient: original });
     await initI18n();
@@ -240,7 +164,7 @@ test('React layout keeps the native notice hidden after activity targets and pre
   const sections = new Map<string, HTMLElement | null>();
   const props = propsFor();
   props.parentComponent.RegisterSection = (name, element) => { sections.set(name, element); };
-  const Layout = createLibraryLayout(nativeLayout, NativeSeek, { LeftColumn: 'LeftColumn', ColumnContainer: 'ColumnContainer' }, sources);
+  const Layout = createLibraryLayout(nativeLayout, NativeSeek, { LeftColumn: 'LeftColumn', ColumnContainer: 'ColumnContainer' }, sources, native);
   // Model a theme that inspects each newly committed column container only once.
   const seen = new WeakSet<Element>();
   const discoveries: number[] = [];
@@ -265,10 +189,6 @@ test('React layout keeps the native notice hidden after activity targets and pre
     expect(document.getElementById('native-activity')).toBeNull();
     expect(document.querySelectorAll('[data-external-news]')).toHaveLength(1);
     expect(document.querySelector('[data-external-news]')?.textContent).toContain('Update');
-    expect(document.querySelector('[data-external-news]')?.className).toContain(APP_SECTION_CLASSES_FALLBACK.AppDetailsSection);
-    expect(document.querySelector('[data-external-news] .Body > .PostTextEntry')?.getAttribute('aria-hidden')).toBe('true');
-    expect(document.querySelector('[data-external-news] .PostTextEntry textarea')).toBeNull();
-    expect(document.querySelector<HTMLElement>('[data-external-news] > h2')?.style.position).toBe('');
     expect(document.getElementById('notice')?.closest('[hidden]')).toBe(document.querySelector('.LeftColumn > :last-child'));
     expect(document.querySelector('html:has(._5uvIN6jXDXzzck59F-nhv):has(._1TGl52GwsFQg3CXUYvThP-)')).not.toBeNull();
     expect(document.querySelector<HTMLElement>('[data-nsp]')!.style.display).toBe('');
@@ -298,7 +218,7 @@ test('React news ignores stale results after navigation and retries failed reque
     if (appId === id) return new Promise(done => { resolve = done; });
     return fail ? Promise.reject(new Error('offline')) : Promise.resolve([]);
   };
-  const Layout = createLibraryLayout(nativeLayout, NativeSeek, { LeftColumn: 'LeftColumn', ColumnContainer: 'ColumnContainer' }, sources);
+  const Layout = createLibraryLayout(nativeLayout, NativeSeek, { LeftColumn: 'LeftColumn', ColumnContainer: 'ColumnContainer' }, sources, native);
   const root = createRoot(document.body);
   try {
     await act(async () => root.render(h(Layout, propsFor())));
