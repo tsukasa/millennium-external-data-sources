@@ -16,7 +16,7 @@
   "scripts": {
     "locales": "bun scripts/generate-locales.ts",
     "dev": "bun run locales && starlight watch",
-    "build": "bun run test && starlight pack",
+    "build": "bun run test && bun -e \"require('node:fs').mkdirSync('dist', { recursive: true })\" && starlight pack",
     "prepare": "bun run locales && starlight lsp",
     "check": "bun run locales && tsc --noEmit",
     "test": "bun run locales && bun test"
