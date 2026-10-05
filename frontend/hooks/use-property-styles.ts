@@ -6,10 +6,7 @@ export interface PropertyStyles {
   buttonClass: string;
 }
 
-/**
- * Resolve native properties classes once per mounted editor.
- * @returns An object containing the classes and buttonClass.
- */
+/** Resolve native properties classes once per mounted editor. */
 export function usePropertyStyles(): PropertyStyles {
   return useMemo(() => {
     const classes = findClassModule(m => m.SectionTopLine) as Record<string, string> | undefined;
@@ -17,7 +14,7 @@ export function usePropertyStyles(): PropertyStyles {
     const buttonClass = [
       buttons?.DialogButton || '_1KAp5PPYG7si-T_66zNEcU',
       buttons?.Focusable || '_2MgqWIMDzJajWDw345eImx',
-      'DialogButton', 'Focusable',
+      'SettingsDialogButton', 'DialogButton', '_DialogLayout', 'Secondary', 'Focusable',
     ].join(' ');
     return { classes, buttonClass };
   }, []);

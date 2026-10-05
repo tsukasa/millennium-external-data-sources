@@ -11,7 +11,7 @@ interface ConfigurationSectionSelectorProps {
 
 export function ConfigurationSectionSelector({ section, onChange }: ConfigurationSectionSelectorProps) {
   return (
-    <div className="MillenniumDesktopSidebar_EditorHeader">
+    <div className="MillenniumDesktopSidebar_EditorHeader extdatasrc-plugin-settings-section-selector">
       <Dropdown
         rgOptions={[
           { data: 'general', label: getPluginI18nString('generalSettings') },

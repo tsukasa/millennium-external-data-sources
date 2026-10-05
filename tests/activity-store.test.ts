@@ -3,6 +3,7 @@ import { registerActivityStore } from '../frontend/steam/activity-store';
 import type { NewsItem } from '../frontend/feed';
 import type { NativeBindings } from '../frontend/steam/news-discovery';
 import type { FeedManager } from '../frontend/feed/manager';
+import type { FeedSourceSettings } from '../frontend/feed/types';
 
 const appId = 4066412613;
 const url = 'https://example.com/feed';
@@ -64,7 +65,7 @@ test('activity store shares feed days without Steam requests and restores native
   const cacheListeners = new Set<() => void>();
   let items = [item];
   const feedManager = {
-    values: { [appId]: url },
+    sources: { [appId]: { url, showFeedInWhatsNew: true } },
     subscribe(listener: () => void) { sourceListeners.add(listener); return () => sourceListeners.delete(listener); },
     cache: {
       peekLast: () => items,
@@ -121,7 +122,7 @@ test('cold activity store publishes feed updates for several shortcuts', () => {
   let items: NewsItem[] | undefined;
   const otherId = 4066412614;
   const feedManager = {
-    values: { [appId]: url, [otherId]: url },
+    sources: { [appId]: { url, showFeedInWhatsNew: true }, [otherId]: { url, showFeedInWhatsNew: true } },
     subscribe() { return () => {}; },
     cache: {
       peekLast: () => items,
@@ -177,9 +178,9 @@ test('activity cleanup preserves foreign entries and later method wrappers', asy
   Object.assign(globalThis, { window: { appActivityStore: store } });
   const listeners = new Set<() => void>();
   const otherId = appId + 1;
-  const values: Record<string, string> = { [appId]: url, [otherId]: url };
+  const sources: Record<string, FeedSourceSettings> = { [appId]: { url, showFeedInWhatsNew: true }, [otherId]: { url, showFeedInWhatsNew: true } };
   const feedManager = {
-    values,
+    sources,
     subscribe() { return () => {}; },
     cache: {
       peekLast: () => [item],
@@ -201,7 +202,7 @@ test('activity cleanup preserves foreign entries and later method wrappers', asy
     listeners.forEach(listener => listener());
     expect(map.get(appId)).toBe(replacement);
     expect(day.events).toContain(foreignEvent);
-    delete values[String(appId)];
+    delete sources[appId];
     listeners.forEach(listener => listener());
     expect(map.get(appId)).toBe(replacement);
     expect([...replacement.m_mapActivityByDay.values()]).toEqual([day, emptyDay]);
@@ -209,7 +210,7 @@ test('activity cleanup preserves foreign entries and later method wrappers', asy
     // Another plugin replaces the second activity immediately before cleanup.
     const secondReplacement = { m_mapActivityByDay: new Map([[1, day]]) };
     map.set(otherId, secondReplacement);
-    const wrappers = new Map<string, Function>();
+    const wrappers = new Map<string, (...args: unknown[]) => unknown>();
     for (const name of ['GetAppActivity', 'RequestRestoreActivity', 'RestoreActivity',
       'FetchLatestActivity', 'FetchLatestActivityFromServer', 'FetchActivityHistory']) {
       const inner = (store as any)[name];
@@ -255,7 +256,7 @@ test('activity installation failure restores hooks, subscriptions and partial fe
     }
   }
   const feedManager = {
-    values: { [appId]: url },
+    sources: { [appId]: { url, showFeedInWhatsNew: true } },
     subscribe(listener: () => void) { sourceListeners.add(listener); return () => sourceListeners.delete(listener); },
     cache: {
       peekLast: () => [item],

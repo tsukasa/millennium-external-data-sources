@@ -16,8 +16,6 @@ export type RunAsyncAction = (action: () => Promise<void>, pending?: StatusKey, 
 /**
  * Custom hook for managing asynchronous action status.
  * Provides busy, status, error states and a run function to execute async actions.
- * @param initialStatus Optional initial status key to display.
- * @returns An object containing busy, status, error states and a run function.
  */
 export function useAsyncStatus(initialStatus?: StatusKey): AsyncStatus {
   const [busy, setBusy] = useState(true);

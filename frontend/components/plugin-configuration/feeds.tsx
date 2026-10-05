@@ -1,4 +1,4 @@
-import { Field, TextField } from 'millennium';
+import { Button, Field, TextField } from 'millennium';
 import { useEffect, useState } from 'react';
 import { getPluginI18nString } from '../../i18n';
 import { FeedManager } from '../../feed/manager';
@@ -50,7 +50,7 @@ export function PluginConfigurationFeed({ feedManager, visible }: PluginConfigur
   };
 
   return (
-    <div className="DialogBody" style={{ width: '100%', display: visible ? undefined : 'none' }}>
+    <div className={`DialogBody extdatasrc-plugin-settings-panel${visible ? '' : ' extdatasrc-plugin-settings-panel-hidden'}`}>
 
       {/* Feed Refresh Interval */}
 
@@ -69,7 +69,7 @@ export function PluginConfigurationFeed({ feedManager, visible }: PluginConfigur
           value={interval}
           disabled={busy}
           onChange={event => setIntervalValue(event.target.value)}
-          style={{ width: 44 }} />
+          className="extdatasrc-plugin-settings-feed-refresh-interval-input" />
       </Field>
 
       {/* Simultaneous Feed Fetches */}
@@ -89,20 +89,19 @@ export function PluginConfigurationFeed({ feedManager, visible }: PluginConfigur
           value={concurrency}
           disabled={busy}
           onChange={event => setConcurrency(event.target.value)}
-          style={{ width: 24 }} />
+          className="extdatasrc-plugin-settings-feed-concurrency-input" />
       </Field>
 
       {/* Save Button */}
 
-      <button type="button"
-        className="DialogButton"
+      <Button type="button"
+        className="DialogButton extdatasrc-plugin-settings-feed-save-button"
         disabled={busy || !inputPassedValidation}
-        onClick={save}
-        style={{ marginTop: 12 }}>
+        onClick={save}>
         {getPluginI18nString('save')}
-      </button>
+      </Button>
 
-      <div role={error ? 'alert' : 'status'} style={{ marginTop: 12 }}>
+      <div role={error ? 'alert' : 'status'} className="extdatasrc-plugin-form-status-message">
         {status}
       </div>
 

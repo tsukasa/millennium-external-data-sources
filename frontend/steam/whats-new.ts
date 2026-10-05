@@ -1,10 +1,11 @@
 import type { NativeEventModel } from './news-types';
 import { EXTERNAL_NEWS_PREFIX, POPUP_ACTIVITY, POPUP_DESKTOP_CLIENT_ACTIVITY } from '../constants';
-import { createWhatsNewEvents } from './whats-new-events';
+import { createWhatsNewEvents, type WhatsNewEvents } from './whats-new-events';
 import { MethodHooks } from './method-hooks';
 import { isNonSteamId, openArticle, steam, type SteamSubscription } from './client';
 import type { NativeBindings } from './news-discovery';
 import type { FeedManager } from '../feed/manager';
+import { whatsNewImageCss } from '../styles';
 
 interface HomeNavigationOptions {
   partnerEvent?: PartnerEventReference;
@@ -28,10 +29,12 @@ export interface WhatsNewStore {
   m_vecHomeBestEventsForUser?: NativeEventModel[];
   TrackEventShownToUser(event: NativeEventModel, ...args: unknown[]): unknown;
   TrackEventClickedByUser(event: NativeEventModel, ...args: unknown[]): unknown;
+  TrackEventShownToUserByGID?(gid: string, ...args: unknown[]): unknown;
   RemoveEvent(gid: string): unknown;
   GetUserAppPrioritySetting(appId: number): number | undefined;
   RaiseAppPriorityForApp(appId: number): Promise<unknown>;
   LowerAppPriorityForApp(appId: number): Promise<unknown>;
+  ResetUserAppPriorityForApp?(appId: number): Promise<unknown>;
 }
 
 export interface Navigator {
@@ -44,12 +47,86 @@ export interface NavigationStore {
   SetNavigator(navigator: Navigator): void;
 }
 
-/**
- * Adds feed models to Steam's native What's New carousel without Steam service requests.
- * @param feedManager The FeedManager instance containing the feed settings.
- * @param native The NativeBindings instance for interacting with Steam's native news system.
- * @returns A function that disposes of the registered Whats New functionality.
- */
+function eventTime(event: NativeEventModel): number {
+  const value = event.GetStartTimeAndDateUnixSeconds?.() ?? event.startTime ?? event.postTime;
+
+  return typeof value === 'number' && Number.isFinite(value)
+    ? value
+    : 0;
+}
+
+function installNavigationHooks(hooks: MethodHooks, navStore: NavigationStore,
+  openExternalArticle: (gid: unknown) => boolean): void {
+  const patchedNavigators = new WeakSet<Navigator>();
+  const patchNavigator = (navigator?: Navigator) => {
+    if (!navigator || patchedNavigators.has(navigator))
+      return;
+
+    hooks.wrap(navigator, 'Home', (original, _instance, args) =>
+      openExternalArticle(args[0]?.partnerEvent?.gid) ? undefined : original());
+
+    if (navigator.App) {
+      hooks.wrap(navigator, 'App', (original, _instance, args) =>
+        openExternalArticle(args[1]?.gidPartnerEvent) ? undefined : original());
+    }
+
+    patchedNavigators.add(navigator);
+  };
+
+  hooks.wrap(navStore, 'SetNavigator', (original, _instance, [navigator]) => {
+    patchNavigator(navigator);
+    return original();
+  });
+
+  // Patch the navigator to include custom behavior for external events.
+  patchNavigator(navStore.GetNavigator());
+}
+
+function installEventActionHooks(hooks: MethodHooks, store: WhatsNewStore, externalEvents: WhatsNewEvents,
+  feedManager: FeedManager, refresh: () => void): void {
+  for (const name of ['TrackEventShownToUser', 'TrackEventClickedByUser'] as const) {
+    hooks.wrap(store, name, (original, _instance, [event]) =>
+      event?.GID?.startsWith(EXTERNAL_NEWS_PREFIX)
+        ? undefined
+        : original()
+    );
+  }
+
+  if (store.TrackEventShownToUserByGID) {
+    hooks.wrap(store, 'TrackEventShownToUserByGID', (original, _instance, [gid]) =>
+      gid.startsWith(EXTERNAL_NEWS_PREFIX) ? undefined : original());
+  }
+
+  hooks.wrap(store, 'RemoveEvent', (original, _instance, [gid]) => {
+    if (!gid.startsWith(EXTERNAL_NEWS_PREFIX))
+      return original();
+
+    const url = externalEvents.articleUrl(gid);
+
+    if (url)
+      void feedManager.addUrlToRemovedFeedItems(url);
+    else {
+      externalEvents.hide(gid);
+      refresh();
+    }
+
+    return undefined;
+  });
+
+  // Undefined hides Steam's priority menu actions for non-Steam games.
+  hooks.wrap(store, 'GetUserAppPrioritySetting', (original, _instance, [appId]) =>
+    isNonSteamId(appId) ? undefined : original());
+
+  for (const name of ['RaiseAppPriorityForApp', 'LowerAppPriorityForApp', 'ResetUserAppPriorityForApp'] as const) {
+    if (!store[name])
+      continue;
+
+    hooks.wrap(store, name, (original, _instance, [appId]) =>
+      isNonSteamId(appId) ? Promise.resolve(false) : original());
+  }
+}
+
+/** Adds feed models to Steam's native What's New carousel without Steam service requests. */
 export function registerWhatsNew(feedManager: FeedManager, native: NativeBindings): () => void {
   const client = steam();
 
@@ -66,20 +143,11 @@ export function registerWhatsNew(feedManager: FeedManager, native: NativeBinding
 
   const hooks = new MethodHooks();
   const externalEvents = createWhatsNewEvents(feedManager, native);
-  const patchedNavigators = new WeakSet<Navigator>();
 
   let disposed = false;
   let popupSubscription: SteamSubscription | undefined;
   let unsubscribeFeedManager: (() => void) | undefined;
   let unsubscribeCache: (() => void) | undefined;
-
-  const eventTime = (event: NativeEventModel): number => {
-    const value = event.GetStartTimeAndDateUnixSeconds?.() ?? event.startTime ?? event.postTime;
-
-    return typeof value === 'number' && Number.isFinite(value)
-      ? value
-      : 0;
-  };
 
   const imageStyles = new Map<Document, HTMLStyleElement>();
 
@@ -89,12 +157,7 @@ export function registerWhatsNew(feedManager: FeedManager, native: NativeBinding
 
     const style = doc.createElement('style');
 
-    style.textContent = `
-    .EventRowCarousel img.PartnerEventRowCapsule_MainImage,   /* Desktop Client */
-    .BasicHomeUpdates .EventCarousel img.EventImage {         /* Big Picture */
-      aspect-ratio: 16 / 9;
-      object-fit: cover;
-    }`;
+    style.textContent = whatsNewImageCss;
 
     doc.head.append(style);
     imageStyles.set(doc, style);
@@ -106,7 +169,10 @@ export function registerWhatsNew(feedManager: FeedManager, native: NativeBinding
     if (knownUrl)
       return knownUrl;
 
-    for (const [appId, feedUrl] of Object.entries(feedManager.values)) {
+    for (const [appId, { url: feedUrl }] of Object.entries(feedManager.sources)) {
+      if (!feedUrl)
+        continue;
+
       const item = feedManager.cache
         .peekLast(feedUrl)
         ?.find(item => `${EXTERNAL_NEWS_PREFIX}${appId}:${item.gid}` === gid);
@@ -135,21 +201,6 @@ export function registerWhatsNew(feedManager: FeedManager, native: NativeBinding
     openArticle(doc, url);
 
     return true;
-  };
-
-  const patchNavigator = (navigator?: Navigator) => {
-    if (!navigator || patchedNavigators.has(navigator))
-      return;
-
-    hooks.wrap(navigator, 'Home', (original, _instance, args) =>
-      openExternalArticle(args[0]?.partnerEvent?.gid) ? undefined : original());
-
-    if (navigator.App) {
-      hooks.wrap(navigator, 'App', (original, _instance, args) =>
-        openExternalArticle(args[1]?.gidPartnerEvent) ? undefined : original());
-    }
-
-    patchedNavigators.add(navigator);
   };
 
   const cleanup = () => {
@@ -195,46 +246,9 @@ export function registerWhatsNew(feedManager: FeedManager, native: NativeBinding
         : result;
     });
 
-    for (const name of ['TrackEventShownToUser', 'TrackEventClickedByUser'] as const) {
-      hooks.wrap(store, name, (original, _instance, [event]) =>
-        event?.GID?.startsWith(EXTERNAL_NEWS_PREFIX)
-          ? undefined
-          : original()
-      );
-    }
+    installEventActionHooks(hooks, store, externalEvents, feedManager, refresh);
 
-    hooks.wrap(store, 'RemoveEvent', (original, _instance, [gid]) => {
-      if (!gid.startsWith(EXTERNAL_NEWS_PREFIX))
-        return original();
-
-      const url = externalEvents.articleUrl(gid);
-
-      if (url)
-        void feedManager.addUrlToRemovedFeedItems(url);
-      else {
-        externalEvents.hide(gid);
-        refresh();
-      }
-
-      return undefined;
-    });
-
-    // Undefined hides Steam's priority menu actions for non-Steam games.
-    hooks.wrap(store, 'GetUserAppPrioritySetting', (original, _instance, [appId]) =>
-      isNonSteamId(appId) ? undefined : original());
-
-    for (const name of ['RaiseAppPriorityForApp', 'LowerAppPriorityForApp'] as const) {
-      hooks.wrap(store, name, (original, _instance, [appId]) =>
-        isNonSteamId(appId) ? Promise.resolve(false) : original());
-    }
-
-    hooks.wrap(navStore, 'SetNavigator', (original, _instance, [navigator]) => {
-      patchNavigator(navigator);
-      return original();
-    });
-
-    // Patch the navigator to include custom behavior for external events.
-    patchNavigator(navStore.GetNavigator());
+    installNavigationHooks(hooks, navStore, openExternalArticle);
 
     unsubscribeFeedManager = feedManager.subscribe(() => {
       externalEvents.clear();

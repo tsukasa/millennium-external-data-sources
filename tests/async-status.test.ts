@@ -1,6 +1,6 @@
 import { beforeEach, expect, test } from 'bun:test';
 import { act, createElement as h } from 'react';
-import { createRoot } from 'react-dom/client';
+import { createRoot } from './helpers/ui-runtime';
 import { installBackend, useAsyncStatus, getPluginI18nString } from './helpers/ui-runtime';
 
 beforeEach(installBackend);

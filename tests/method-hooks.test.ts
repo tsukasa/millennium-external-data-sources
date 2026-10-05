@@ -25,7 +25,11 @@ test('prototype getter methods and inherited methods restore their descriptors',
   let receiver: unknown;
   Object.defineProperty(Child.prototype, 'render', {
     configurable: true,
-    get() { receiver = this; return function (this: Child) { return this; }; },
+    get() {
+      // eslint-disable-next-line @typescript-eslint/no-this-alias -- Assert the native getter's receiver.
+      receiver = this;
+      return function (this: Child) { return this; };
+    },
   });
   const descriptor = Object.getOwnPropertyDescriptor(Child.prototype, 'render');
   hooks.wrap(Child.prototype, 'render', call => call());

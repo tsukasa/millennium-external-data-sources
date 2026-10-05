@@ -19,14 +19,14 @@ jobs:
       - name: Build plugin
         run: |
           bun install --frozen-lockfile
-          bun run build
-          test -s dist/io.tsukasa.millennium.external-data-sources.star
+          bun run relbuild
+          test -s dist/io.tsukasa.external-data-sources.star
 
       - name: Save build artifact
         uses: actions/upload-artifact@v7
         with:
           name: external-data-sources-${{ github.run_id }}
-          path: dist/io.tsukasa.millennium.external-data-sources.star
+          path: dist/io.tsukasa.external-data-sources.star
           if-no-files-found: error
 
       - name: Publish version release
@@ -58,7 +58,7 @@ jobs:
           fi
 
           gh release create "$TAG" \
-            dist/io.tsukasa.millennium.external-data-sources.star \
+            dist/io.tsukasa.external-data-sources.star \
             --verify-tag \
             --title "External Data Sources Plugin $TAG" \
             --notes-file release-notes.md

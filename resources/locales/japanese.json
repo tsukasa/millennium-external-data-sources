@@ -8,13 +8,10 @@
   "concurrentFeedFetches": "Simultaneous feed fetches",
   "concurrentFeedFetchesDescription": "Maximum number of feeds fetched at once (1–8).",
   "externalNewsSource": "外部ニュースソース",
-  "externalReleaseDate": "External Release Date",
   "releaseDate": "Release Date",
   "year": "Year",
   "month": "Month",
   "day": "Day",
-  "couldNotSaveReleaseDate": "Could not save release date.",
-  "couldNotRemoveReleaseDate": "Could not remove release date.",
   "chooseFeed": "このゲーム用の RSS または Atom フィードを選択してください。",
   "showFeedInWhatsNew": "「新着」にフィードを表示",
   "maxItemsInWhatsNewTitle": "「新着」の最大件数",
@@ -30,5 +27,12 @@
   "activity": "アクティビティ",
   "enterFeedUrl": "HTTP または HTTPS のフィード URL を入力してください。",
   "couldNotSaveFeedSource": "フィードソースを保存できませんでした。",
-  "couldNotRemoveFeedSource": "フィードソースを削除できませんでした。"
+  "couldNotRemoveFeedSource": "フィードソースを削除できませんでした。",
+  "externalGameDetails": "外部ゲーム詳細",
+  "addedToLibraryDate": "ライブラリへの追加日",
+  "developer": "開発元",
+  "publisher": "パブリッシャー",
+  "tags": "タグ",
+  "couldNotSaveGameDetails": "ゲーム詳細を保存できませんでした。",
+  "couldNotRemoveGameDetails": "ゲーム詳細を削除できませんでした。"
 }

@@ -1,11 +1,14 @@
-import type { CalendarDate } from '../../frontend/release-date/calendar-date';
+import type { GameDetails, GameDetailField } from '../../frontend/game-details/manager';
 import type { GlobalFeedSettings } from '../../frontend/feed/types';
 import type { NativeToggleProps, NativeDropdownProps } from '../../frontend/hooks/use-native-controls';
 import { mock } from 'bun:test';
 import { JSDOM } from 'jsdom';
-import { Component, createElement as h, type ReactNode, type InputHTMLAttributes } from 'react';
+import { act, Component, createElement as h, type ReactNode, type InputHTMLAttributes } from 'react';
 
 interface MockTextFieldProps extends InputHTMLAttributes<HTMLInputElement> {
+  label?: ReactNode;
+  description?: ReactNode;
+  inlineControls?: ReactNode;
   mustBeNumeric?: boolean;
   rangeMin?: number;
   rangeMax?: number;
@@ -33,7 +36,7 @@ interface UIRuntime {
   shown: Record<string, boolean>;
   maxed: Record<string, number>;
   removed: string[];
-  savedDates: Record<string, CalendarDate>;
+  savedDetails: Record<string, GameDetails>;
   globalFeedSettings: GlobalFeedSettings;
 }
 export const runtime: UIRuntime = {
@@ -45,12 +48,14 @@ export const runtime: UIRuntime = {
   shown: {},
   maxed: {},
   removed: [],
-  savedDates: {},
+  savedDetails: {},
   globalFeedSettings: { refreshIntervalMinutes: 10, concurrentFetches: 2 },
 };
 
 export const dom = new JSDOM('<body></body>', { url: 'https://steamloopback.host' });
 Object.assign(globalThis, { window: dom.window, document: dom.window.document, DOMParser: dom.window.DOMParser, IS_REACT_ACT_ENVIRONMENT: true });
+// React's input-event detection needs the browser globals before initialization.
+export const { createRoot } = await import('react-dom/client');
 class NativeToggleField extends Component<NativeToggleProps> {
   OnToggleChange(value: boolean) { this.props.onChange(value); }
   render() {
@@ -70,6 +75,7 @@ const NativeDropdownField = ({ label, description, rgOptions, selectedOption, di
 };
 export const discoveryDispatcher: Record<string, any> = {};
 mock.module('millennium', () => ({
+  definePlugin: (initialize: () => unknown) => initialize,
   findClassModule: (filter: (value: any) => boolean) => runtime.nativeClassCandidates.find(filter),
   findModule: (filter: (value: any) => boolean) => runtime.libraryModule && filter(runtime.libraryModule) ? runtime.libraryModule : undefined,
   getReactInstance: () => undefined,
@@ -78,12 +84,22 @@ mock.module('millennium', () => ({
     for (const key of Object.keys(discoveryDispatcher)) delete discoveryDispatcher[key];
     Object.assign(discoveryDispatcher, runtime.savedDispatcher);
   },
-  Button: (): null => null,
-  TextField: ({ mustBeNumeric: _numeric, rangeMin, rangeMax, ...props }: MockTextFieldProps) => h('input', { ...props, type: 'number', min: rangeMin, max: rangeMax, 'data-steam-text-field': true }),
+  Button: ({ children, ...props }: import('react').ButtonHTMLAttributes<HTMLButtonElement>) => h('button', props, children),
+  DialogControlsSection: ({ children }: { children: ReactNode }) => h('div', { className: 'DialogControlsSection' }, children),
+  DialogSubHeader: ({ children }: { children: ReactNode }) => h('div', { className: 'DialogSubHeader' }, children),
+  TextField: ({ label, description, inlineControls, mustBeNumeric: _numeric, rangeMin, rangeMax, ...props }: MockTextFieldProps) => {
+    const contents = h('div', { className: 'DialogInput_Wrapper _DialogLayout' },
+      h('input', { ...props, type: _numeric ? 'number' : 'text', min: rangeMin, max: rangeMax, 'data-steam-text-field': true }), inlineControls);
+    return h('div', { className: label ? 'DialogInputLabelGroup _DialogLayout DialogRequirementLabel' : undefined },
+      label && h('div', { className: 'DialogLabel' }, label), contents,
+      description && h('div', { className: 'DialogLabelExplainer' }, description));
+  },
   findModuleExport: (filter: (value: unknown) => boolean) =>
     runtime.nativeModuleCandidates.find(filter) ?? (String(filter).includes('dropDownControlRef') ? NativeDropdownField
       : filter(NativeToggleField) ? NativeToggleField : undefined),
-  DialogCheckbox: (): null => null,
+  DialogCheckbox: ({ label, checked, disabled, onChange, className }: NativeToggleProps & { className?: string }) =>
+    h('label', { className }, h('input', { type: 'checkbox', checked, disabled,
+      onChange: (event: import('react').ChangeEvent<HTMLInputElement>) => onChange(event.target.checked) }), label),
   DropdownItem: (): null => null,
   Dropdown: ({ rgOptions, selectedOption, onChange, menuLabel, disabled }: MockDropdownProps) => h('select', { 'data-native-dropdown': true, value: selectedOption,
     'aria-label': menuLabel, disabled,
@@ -92,11 +108,6 @@ mock.module('millennium', () => ({
     rgOptions.map(option => h('option', { key: option.data, value: option.data }, option.label))),
   Field: ({ label, description, children }: MockFieldProps) =>
     h('div', { className: 'Field Background Panel' }, h('div', null, label, h('small', null, description)), children),
-  beforePatch: (object: Record<string, unknown>, property: string, handler: (this: unknown, args: unknown[]) => void) => {
-    const original = object[property] as (...args: unknown[]) => unknown;
-    object[property] = function(this: unknown, ...args: unknown[]) { handler.call(this, args); return original.apply(this, args); };
-    return { unpatch: () => { object[property] = original; } };
-  },
   afterPatch: (object: Record<string, unknown>, property: string, handler: (args: unknown[], result: unknown) => unknown) => {
     const original = object[property] as (...args: unknown[]) => unknown;
     object[property] = function(this: unknown, ...args: unknown[]) {
@@ -107,10 +118,10 @@ mock.module('millennium', () => ({
   },
 }));
 export const { FeedManager } = await import('../../frontend/feed/manager');
-export const { ReleaseDateManager } = await import('../../frontend/release-date/manager');
-export const { daysInMonth, isCalendarDate } = await import('../../frontend/release-date/calendar-date');
-export const { registerReleaseDates } = await import('../../frontend/steam/release-date-store');
-export const { ExternalReleaseDate } = await import('../../frontend/components/game-properties/external-release-date');
+export const { GameDetailsManager } = await import('../../frontend/game-details/manager');
+export const { daysInMonth, isCalendarDate } = await import('../../frontend/game-details/calendar-date');
+export const { registerGameDetails } = await import('../../frontend/steam/game-details-store');
+export const { ExternalGameDetails } = await import('../../frontend/components/game-properties/external-game-details');
 export const { registerShortcutRemoval } = await import('../../frontend/steam/shortcut-removal');
 export const { createLibraryLayout } = await import('../../frontend/steam/library-layout');
 export const { ExternalNewsSource } = await import('../../frontend/components/game-properties/external-news-source');
@@ -129,7 +140,7 @@ export function installBackend(): void {
   runtime.shown = {};
   runtime.maxed = {};
   runtime.removed = [];
-  runtime.savedDates = {};
+  runtime.savedDetails = {};
   runtime.globalFeedSettings = { refreshIntervalMinutes: 10, concurrentFetches: 2 };
   Object.assign(globalThis, { backend: {
     getFeedSettings: async () => runtime.globalFeedSettings,
@@ -140,11 +151,16 @@ export function installBackend(): void {
     getFeedSources: async () => Object.fromEntries([...new Set([...Object.keys(runtime.saved), ...Object.keys(runtime.shown), ...Object.keys(runtime.maxed)])]
       .map(key => [key, { url: runtime.saved[key] || '', showFeedInWhatsNew: runtime.shown[key], maxItemsFromFeedInWhatsNew: runtime.maxed[key] }])),
     getFeedRemovedItems: async () => [...runtime.removed],
-    getReleaseDates: async () => ({ ...runtime.savedDates }),
-    setReleaseDate: async (key: string, year: number, month: number, day: number) => {
-      runtime.savedDates[key] = { year, month, day }; return true;
+    getGameDetails: async () => structuredClone(runtime.savedDetails),
+    setGameDetail: async (key: string, field: GameDetailField, value: string) => {
+      const details = runtime.savedDetails[key] ||= {};
+      const normalized = field === 'developer' || field === 'publisher' || field === 'tags' ? JSON.parse(value) as string[] : value;
+      if (normalized.length) Object.assign(details, { [field]: normalized });
+      else delete details[field];
+      if (!Object.keys(details).length) delete runtime.savedDetails[key];
+      return true;
     },
-    clearReleaseDate: async (key: string) => { delete runtime.savedDates[key]; return true; },
+    clearGameDetails: async (key: string) => { delete runtime.savedDetails[key]; return true; },
     addFeedRemovedItem: async (articleUrl: string) => { if (!runtime.removed.includes(articleUrl)) runtime.removed.push(articleUrl); return true; },
     saveFeedSource: async (key: string, value: string, showInWhatsNew: boolean) => { if (value.includes('fail')) throw new Error('disk error'); runtime.saved[key] = value; runtime.shown[key] = showInWhatsNew; return true; },
     setShowFeedInWhatsNew: async (key: string, value: boolean) => { runtime.shown[key] = value; return true; },
@@ -154,3 +170,22 @@ export function installBackend(): void {
   } });
 }
 export const tick = () => new Promise(resolve => setTimeout(resolve, 0));
+
+/** Bypass React's value tracker so it sees a user edit rather than a programmatic assignment. */
+export async function typeText(input: HTMLInputElement, value: string): Promise<void> {
+  await act(async () => {
+    input.focus();
+    const win = input.ownerDocument.defaultView!;
+    Object.getOwnPropertyDescriptor(win.HTMLInputElement.prototype, 'value')!.set!.call(input, value);
+    input.dispatchEvent(new win.Event('input', { bubbles: true }));
+  });
+}
+
+export async function selectOption(select: HTMLSelectElement, value: string): Promise<void> {
+  await act(async () => {
+    select.value = value;
+    const win = select.ownerDocument.defaultView!;
+    select.dispatchEvent(new win.Event('change', { bubbles: true }));
+    await tick();
+  });
+}

@@ -3,17 +3,20 @@ import type { FeedManager } from '../feed/manager';
 import type { NativeBindings } from './news-discovery';
 import { isNonSteamId } from './client';
 import { MethodHooks } from './method-hooks';
+import { findModuleExport } from 'millennium';
+import { EXTERNAL_NEWS_PREFIX } from '../constants';
+import { activityImageCss } from '../styles';
+
+interface EventTracker {
+  QueueForUpload(marking: { event_gid(): string }): void;
+}
 
 interface RatingState {
   inert: boolean;
   ariaHidden: string | null;
 }
 
-/**
- * Get the DOM element corresponding to a React ActivityComponent instance.
- * @param instance The ActivityComponent instance.
- * @returns The HTMLElement corresponding to the instance, or undefined if not found.
- */
+/** Get the DOM element corresponding to a React ActivityComponent instance. */
 function elementFor(instance: ActivityComponent): HTMLElement | undefined {
   let fiber = instance._reactInternals?.child;
   while (fiber && !(fiber.stateNode && typeof fiber.stateNode === 'object' && 'nodeType' in fiber.stateNode && fiber.stateNode.nodeType === 1))
@@ -21,13 +24,9 @@ function elementFor(instance: ActivityComponent): HTMLElement | undefined {
   return fiber?.stateNode as HTMLElement | undefined;
 }
 
-/**
- * Remove posting controls and disable Steam actions on native feed cards.
- * @param feedManager The feed manager instance.
- * @param native The native bindings instance.
- */
+/** Remove posting controls and disable Steam actions on native feed cards. */
 export function registerActivityComponents(feedManager: FeedManager, native: NativeBindings): () => void {
-  const configured = (appId: number) => isNonSteamId(appId) && !!feedManager.values[String(appId)];
+  const configured = (appId: number) => isNonSteamId(appId) && !!feedManager.sources[String(appId)]?.url;
   const sectionProto = native.Section.prototype;
   const postProto = native.PostTextEntry.prototype;
   const announcementProto = native.Announcement.prototype;
@@ -52,11 +51,7 @@ export function registerActivityComponents(feedManager: FeedManager, native: Nat
     if (!styledDocuments.has(doc)) {
       // Force 16:9 aspect ratio for images so the layout remains consistent
       const style = doc.createElement('style');
-      style.textContent = `
-        [data-external-news-activity] .PartnerEventMediumImage_Image {
-          width: 100%; height: auto; aspect-ratio: 16 / 9; object-fit: cover; display: block;
-        }
-      `;
+      style.textContent = activityImageCss;
       doc.head.append(style);
       styledDocuments.set(doc, style);
     }
@@ -65,10 +60,7 @@ export function registerActivityComponents(feedManager: FeedManager, native: Nat
     section.setAttribute('data-external-news-activity', '');
   };
 
-  /**
-   * Mark a rating component as inert and hide it from assistive technologies.
-   * @param instance The ActivityComponent instance containing the rating.
-   */
+  /** Mark a rating component as inert and hide it from assistive technologies. */
   const markRating = (instance: ActivityComponent) => {
     if (!instance.props.event?.externalNewsItem)
       return;
@@ -115,15 +107,28 @@ export function registerActivityComponents(feedManager: FeedManager, native: Nat
   };
 
   try {
+    const Tracker = findModuleExport(value => value?.prototype?.QueueForUpload
+      && value?.prototype?.MarkEventShown
+      && value?.prototype?.MarkEventRead) as { prototype: EventTracker } | undefined;
+
+    if (Tracker) {
+      // Cover native callers that bypass libraryEventStore's tracking methods.
+      hooks.wrap(Tracker.prototype, 'QueueForUpload', (original, _instance, [marking]) =>
+        marking.event_gid().startsWith(EXTERNAL_NEWS_PREFIX) ? undefined : original());
+    }
+
     hooks.wrap(postProto, 'render', (original, instance) => {
       // The text entry has no appid; find its native Activity parent in either UI.
       for (let fiber = instance._reactInternals; fiber; fiber = fiber.return) {
         const appId = fiber.pendingProps?.appid ?? fiber.memoizedProps?.appid;
+
         if (appId !== undefined && configured(Number(appId)))
           return null;
       }
+
       return original();
     });
+
     hooks.wrap(sectionProto, 'OnPostStatusClicked', (original, instance) =>
       configured(Number(instance.props.appid)) ? undefined : original());
 
@@ -131,19 +136,28 @@ export function registerActivityComponents(feedManager: FeedManager, native: Nat
       hooks.wrap(sectionProto, name, (original, instance) => {
         const result = original();
         markSection(instance);
+
         return result;
       });
+
       hooks.wrap(announcementProto, name, (original, instance) => {
         const result = original();
         markRating(instance);
+
         return result;
       });
     }
-    for (const name of ['LoadMyVoteInformation', 'OnRateUpClicked',
-      'OnRateDownClicked', 'ShowOptionsContextMenu', 'OnViewThread'] as const) {
+
+    for (const name of [
+      'LoadMyVoteInformation',
+      'OnRateUpClicked',
+      'OnRateDownClicked',
+      'ShowOptionsContextMenu',
+      'OnViewThread'] as const) {
       hooks.wrap(announcementProto, name, (original, instance) =>
         instance.props.event?.externalNewsItem ? undefined : original());
     }
+
     return cleanup;
   } catch (error) {
     cleanup();

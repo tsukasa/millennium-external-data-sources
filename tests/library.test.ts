@@ -1,6 +1,6 @@
 import { beforeEach, expect, test } from 'bun:test';
 import { act, Component, useLayoutEffect, createElement as h } from 'react';
-import { createRoot } from 'react-dom/client';
+import { createRoot } from './helpers/ui-runtime';
 import type { LayoutProps, SeekTarget } from '../frontend/steam/library-layout';
 import { installBackend, FeedManager, createLibraryLayout, discoverNativeNews, registerLibrary, id, otherId, url, tick, runtime, discoveryDispatcher } from './helpers/ui-runtime';
 
@@ -31,8 +31,8 @@ const propsFor = (appid = Number(id)): LayoutProps => ({
 test('React layout keeps the native notice hidden after activity targets and preserves Playtime', async () => {
   document.body.replaceChildren();
   const feedManager = new FeedManager();
-  feedManager.values[id] = url;
-  feedManager.showFeedInWhatsNew[id] = false;
+  feedManager.sources[id] = { url, showFeedInWhatsNew: true };
+  feedManager.sources[id].showFeedInWhatsNew = false;
   const sections = new Map<string, HTMLElement | null>();
   const props = propsFor();
   props.parentComponent.RegisterSection = (name, element) => { sections.set(name, element); };
@@ -81,8 +81,8 @@ test('React layout keeps the native notice hidden after activity targets and pre
 test('React layout leaves Steam activity intact across shortcut navigation', async () => {
   document.body.replaceChildren();
   const feedManager = new FeedManager();
-  feedManager.values[id] = url;
-  feedManager.values[otherId] = 'https://other.test/rss';
+  feedManager.sources[id] = { url, showFeedInWhatsNew: true };
+  feedManager.sources[otherId] = { url: 'https://other.test/rss', showFeedInWhatsNew: true };
   const Layout = createLibraryLayout(nativeLayout, NativeSeek, { LeftColumn: 'LeftColumn', ColumnContainer: 'ColumnContainer' }, feedManager);
   const root = createRoot(document.body);
   try {
@@ -209,7 +209,7 @@ test('discovery needs only live bindings, restores its environment and installs 
     broken = false;
 
     const feedManager = new FeedManager();
-    feedManager.values[id] = url;
+    feedManager.sources[id] = { url, showFeedInWhatsNew: true };
     cleanup = registerLibrary(feedManager);
     const instance = new LayoutController();
     expect([...instance.GetSections({ appid: Number(id) })]).toEqual(['nonsteam', 'activityrollup', 'activity']);

@@ -8,13 +8,10 @@
   "concurrentFeedFetches": "Simultaneous feed fetches",
   "concurrentFeedFetchesDescription": "Maximum number of feeds fetched at once (1–8).",
   "externalNewsSource": "Външен източник на новини",
-  "externalReleaseDate": "External Release Date",
   "releaseDate": "Release Date",
   "year": "Year",
   "month": "Month",
   "day": "Day",
-  "couldNotSaveReleaseDate": "Could not save release date.",
-  "couldNotRemoveReleaseDate": "Could not remove release date.",
   "chooseFeed": "Изберете RSS или Atom канал за тази игра.",
   "showFeedInWhatsNew": "Показване на канала в „Какви са новостите“",
   "maxItemsInWhatsNewTitle": "Макс. записи в „Какви са новостите“",
@@ -30,5 +27,12 @@
   "activity": "Активност",
   "enterFeedUrl": "Въведете URL адрес на канал с HTTP или HTTPS.",
   "couldNotSaveFeedSource": "Източникът на канала не можа да бъде запазен.",
-  "couldNotRemoveFeedSource": "Източникът на канала не можа да бъде премахнат."
+  "couldNotRemoveFeedSource": "Източникът на канала не можа да бъде премахнат.",
+  "externalGameDetails": "Външни подробности за играта",
+  "addedToLibraryDate": "Добавено в библиотеката",
+  "developer": "Разработчик",
+  "publisher": "Издател",
+  "tags": "Етикети",
+  "couldNotSaveGameDetails": "Подробностите за играта не можаха да бъдат запазени.",
+  "couldNotRemoveGameDetails": "Подробностите за играта не можаха да бъдат премахнати."
 }

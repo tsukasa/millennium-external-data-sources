@@ -8,13 +8,10 @@
   "concurrentFeedFetches": "Simultaneous feed fetches",
   "concurrentFeedFetchesDescription": "Maximum number of feeds fetched at once (1–8).",
   "externalNewsSource": "Harici Haber Kaynağı",
-  "externalReleaseDate": "External Release Date",
   "releaseDate": "Release Date",
   "year": "Year",
   "month": "Month",
   "day": "Day",
-  "couldNotSaveReleaseDate": "Could not save release date.",
-  "couldNotRemoveReleaseDate": "Could not remove release date.",
   "chooseFeed": "Bu oyun için bir RSS veya Atom akışı seçin.",
   "showFeedInWhatsNew": "Akışı Yenilikler bölümünde göster",
   "maxItemsInWhatsNewTitle": "Yenilikler'de en fazla öğe",
@@ -30,5 +27,12 @@
   "activity": "Etkinlik",
   "enterFeedUrl": "HTTP veya HTTPS akış URL'si girin.",
   "couldNotSaveFeedSource": "Akış kaynağı kaydedilemedi.",
-  "couldNotRemoveFeedSource": "Akış kaynağı kaldırılamadı."
+  "couldNotRemoveFeedSource": "Akış kaynağı kaldırılamadı.",
+  "externalGameDetails": "Harici oyun ayrıntıları",
+  "addedToLibraryDate": "Kütüphaneye eklenme",
+  "developer": "Geliştirici",
+  "publisher": "Yayıncı",
+  "tags": "Etiketler",
+  "couldNotSaveGameDetails": "Oyun ayrıntıları kaydedilemedi.",
+  "couldNotRemoveGameDetails": "Oyun ayrıntıları kaldırılamadı."
 }

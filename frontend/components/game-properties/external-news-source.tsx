@@ -1,11 +1,12 @@
 import { useNativeControls, type NumericOption } from '../../hooks/use-native-controls';
-import { TextField } from 'millennium';
+import { Button, TextField } from 'millennium';
 import { useCallback, useEffect, useState } from 'react';
 import { httpUrl } from '../../feed';
 import { getPluginI18nString } from '../../i18n';
 import { EXTERNAL_NEWS_DEFAULT_MAX_ITEMS, EXTERNAL_NEWS_MAX_ITEMS } from '../../constants';
 import { useAsyncStatus } from '../../hooks/use-async-status';
 import { usePropertyStyles } from '../../hooks/use-property-styles';
+import { usePluginStyles } from '../../hooks/use-plugin-styles';
 import type { FeedManager } from '../../feed/manager';
 
 interface ExternalNewsSourceProps {
@@ -20,6 +21,7 @@ export function ExternalNewsSource({ appId, manager }: ExternalNewsSourceProps) 
   const [loaded, setLoaded] = useState(false);
   const { busy, status, error, run } = useAsyncStatus('loading');
   const { classes, buttonClass } = usePropertyStyles();
+  const styleRef = usePluginStyles();
 
   const { ToggleRow, DropdownRow } = useNativeControls();
 
@@ -28,9 +30,9 @@ export function ExternalNewsSource({ appId, manager }: ExternalNewsSourceProps) 
   }));
 
   const reset = useCallback(() => {
-    setValue(manager.values[appId] || '');
-    setShowInWhatsNew(manager.showFeedInWhatsNew[appId] !== false);
-    setMaxItems(manager.maxItemsFromFeedInWhatsNew[appId] ?? EXTERNAL_NEWS_DEFAULT_MAX_ITEMS);
+    setValue(manager.sources[appId]?.url || '');
+    setShowInWhatsNew(manager.sources[appId]?.showFeedInWhatsNew !== false);
+    setMaxItems(manager.sources[appId]?.maxItemsFromFeedInWhatsNew ?? EXTERNAL_NEWS_DEFAULT_MAX_ITEMS);
   }, [appId, manager]);
 
   useEffect(() => {
@@ -71,42 +73,49 @@ export function ExternalNewsSource({ appId, manager }: ExternalNewsSourceProps) 
   }, 'saving', 'feedSettingsSaved');
 
   return (
-    <div>
-      <div className={classes?.Title}>{getPluginI18nString('externalNewsSource')}</div>
+    <>
+      <div ref={styleRef} className={`${classes?.SectionTopLine || ''} SectionTopLine extdatasrc-plugin-news-source-header`}>
 
-      {/* Feed URL */}
-      <div>{getPluginI18nString('chooseFeed')}</div>
-      <div className={classes?.AsyncBackedInputChildren}>
-        <TextField
-          value={value}
-          disabled={busy || !loaded}
-          onChange={event => setValue(event.target.value)} />
+        <div className={`${classes?.Title || ''} Title`}>{getPluginI18nString('externalNewsSource')}</div>
 
-        <button type="button" className={buttonClass}
-          disabled={busy || !loaded || !httpUrl(value.trim())}
-          onClick={save}>{getPluginI18nString('save')}</button>
+        {/* Feed URL */}
+        <div className="DialogBodyText">{getPluginI18nString('chooseFeed')}</div>
 
-        <button type="button" className={buttonClass}
-          disabled={busy || !loaded || !manager.values[appId]}
-          onClick={clear}>{getPluginI18nString('clear')}</button>
+        <div className={`${classes?.AsyncBackedInputChildren || ''} AsyncBackedInputChildren`}>
+
+          <TextField
+            value={value}
+            disabled={busy || !loaded}
+            onChange={event => setValue(event.target.value)} />
+
+          <Button className={buttonClass}
+            disabled={busy || !loaded || !httpUrl(value.trim())}
+            onClick={save}>{getPluginI18nString('save')}</Button>
+
+          <Button className={buttonClass}
+            disabled={busy || !loaded || !manager.sources[appId]?.url}
+            onClick={clear}>{getPluginI18nString('clear')}</Button>
+
+        </div>
+
       </div>
 
       {/* Show in What's New */}
-      <div className="DialogControlsSection" style={{ width: '100%', boxSizing: 'border-box' }}>
+      <div className="DialogControlsSection extdatasrc-plugin-news-source-controls">
+
         <ToggleRow label={getPluginI18nString('showFeedInWhatsNew')}
           checked={showInWhatsNew} disabled={busy || !loaded} onChange={toggleWhatsNew} />
-      </div>
 
-      <div className="DialogControlsSection" style={{ width: '100%', boxSizing: 'border-box' }}>
         <DropdownRow label={getPluginI18nString('maxItemsInWhatsNewTitle')}
           description={getPluginI18nString('maxItemsInWhatsNewDescription')}
           rgOptions={itemOptions} selectedOption={maxItems} disabled={busy || !loaded}
           contextMenuPositionOptions={{ bMatchWidth: false }} onChange={changeMaxItems} />
+
       </div>
 
       {/* Status Message */}
-      <div role={error ? 'alert' : 'status'} style={{ marginTop: 12 }}>{status}</div>
+      {status && <div role={error ? 'alert' : 'status'} className="extdatasrc-plugin-form-status-message">{status}</div>}
 
-    </div>
+    </>
   );
 }

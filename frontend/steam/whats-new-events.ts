@@ -1,6 +1,6 @@
 import type { NativeEventModel } from './news-types';
 import { EXTERNAL_NEWS_PREFIX, EXTERNAL_NEWS_MAX_AGE, EXTERNAL_NEWS_DEFAULT_MAX_ITEMS } from '../constants';
-import { createExternalNewsEvents } from './news-events';
+import { createExternalNewsModels } from './news-events';
 import type { NewsItem } from '../feed';
 import type { NativeBindings } from './news-discovery';
 import type { FeedManager } from '../feed/manager';
@@ -22,20 +22,19 @@ export interface WhatsNewEvents {
   list(): NativeEventModel[];
 }
 
-/**
- * Builds the synthetic event list and tracks its article URLs for Steam actions.
- * @param feedManager The FeedManager instance containing the feed settings.
- * @param native The NativeBindings instance for interacting with Steam's native news system.
- * @returns An object implementing the WhatsNewEvents interface.
- */
+function selectVisibleItems(items: NewsItem[], appId: string, oldest: number, limit: number,
+  removed: Set<string>, hidden: Set<string>): NewsItem[] {
+  const recent = items.filter(item => item.date !== null && item.date >= oldest && !removed.has(item.url));
+  // Persistent removals fill vacancies; temporary hiding does not change the cap.
+  const capped = limit === 0 ? recent : recent.slice(0, limit);
+  return capped.filter(item => !hidden.has(`${EXTERNAL_NEWS_PREFIX}${appId}:${item.gid}`));
+}
+
+/** Builds the synthetic event list and tracks its article URLs for Steam actions. */
 export function createWhatsNewEvents(feedManager: FeedManager, native: NativeBindings): WhatsNewEvents {
   const hidden = new Set<string>();
   const articles = new Map<string, string>();
   const models = new Map<string, WhatsNewModelEntry>();
-
-  const dummyClient = {
-    setQueryData() {}
-  };
 
   return {
     articleUrl(gid: string) {
@@ -59,9 +58,9 @@ export function createWhatsNewEvents(feedManager: FeedManager, native: NativeBin
 
       articles.clear();
 
-      for (const [appId, url] of Object.entries(feedManager.values)) {
+      for (const [appId, { url, showFeedInWhatsNew, maxItemsFromFeedInWhatsNew }] of Object.entries(feedManager.sources)) {
         // Skip feed if presence in "What's New" is explicitly disabled.
-        if (feedManager.showFeedInWhatsNew[appId] === false)
+        if (!url || showFeedInWhatsNew === false)
           continue;
 
         // Skip if there are no items in the feed.
@@ -72,10 +71,8 @@ export function createWhatsNewEvents(feedManager: FeedManager, native: NativeBin
 
         // Select visible items on every call because age and hidden state can change
         // while the parsed feed stays the same.
-        const limit = feedManager.maxItemsFromFeedInWhatsNew[appId] ?? EXTERNAL_NEWS_DEFAULT_MAX_ITEMS;
-        const mostRecentItems = items.filter(item => item.date !== null && item.date >= oldest && !feedManager.feedRemovedItems.has(item.url));
-        const cappedItems = limit === 0 ? mostRecentItems : mostRecentItems.slice(0, limit);
-        const visibleExternalNews = cappedItems.filter(item => !hidden.has(`${EXTERNAL_NEWS_PREFIX}${appId}:${item.gid}`));
+        const limit = maxItemsFromFeedInWhatsNew ?? EXTERNAL_NEWS_DEFAULT_MAX_ITEMS;
+        const visibleExternalNews = selectVisibleItems(items, appId, oldest, limit, feedManager.feedRemovedItems, hidden);
 
         // Detect if we have items to purge from the model due to changes in visibility or recency.
         let entry = models.get(appId);
@@ -83,18 +80,15 @@ export function createWhatsNewEvents(feedManager: FeedManager, native: NativeBin
         if (!entry
           || entry.selected.length !== visibleExternalNews.length
           || visibleExternalNews.some((item, index) => item !== entry?.selected[index])) {
-          const feedEvents = createExternalNewsEvents(native, appId, visibleExternalNews, dummyClient);
-
           entry = {
             selected: visibleExternalNews,
-            events: feedEvents.map(event => {
-              const model = event.eventModel;
+            events: createExternalNewsModels(native, appId, visibleExternalNews).map(({ model, item }) => {
               model.startTime = model.postTime;
               model.endTime = undefined;
 
               return {
                 model,
-                item: event.externalNewsItem
+                item
               };
             })
           };

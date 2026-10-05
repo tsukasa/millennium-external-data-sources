@@ -1,9 +1,56 @@
 import { beforeEach, expect, test } from 'bun:test';
-import { act, createElement as h, forwardRef } from 'react';
-import { createRoot } from 'react-dom/client';
-import { dom, installBackend, FeedManager, ReleaseDateManager, ExternalNewsSource, PluginConfiguration, registerProperties, id, otherId, url, tick, runtime } from './helpers/ui-runtime';
+import { act, createContext, createElement as h, forwardRef, useEffect, useState } from 'react';
+import { createRoot } from './helpers/ui-runtime';
+import { dom, installBackend, FeedManager, GameDetailsManager, ExternalNewsSource, PluginConfiguration, registerProperties, id, otherId, url, tick, runtime, selectOption } from './helpers/ui-runtime';
 
 beforeEach(installBackend);
+
+test('properties can be enabled and disabled while native settings with hooks are mounted', async () => {
+  const feedManager = new FeedManager();
+  const gameDetails = new GameDetailsManager();
+  const pages = [{ title: 'Shortcut', identifier: `/app/${id}/properties/shortcut`, content: null }];
+  let activeEffects = 0;
+  const Settings = forwardRef<unknown, { pages: typeof pages; onPageRequested?: (page: string) => void }>(function Settings(props, _ref) {
+    const [label] = useState('native');
+    const [count, setCount] = useState(0);
+    useEffect(() => {
+      activeEffects++;
+      return () => { activeEffects--; };
+    }, []);
+    return h('div', { className: 'PagedSettingDialog_ContentColumn' },
+      h('button', { 'data-native-counter': true, onClick: () => setCount(count + 1) }, `${label}:${count}`),
+      ...props.pages.map(page => h('button', { key: page.identifier, onClick: () => props.onPageRequested?.(page.identifier) }, page.title)));
+  });
+  runtime.nativeModuleCandidates = [Settings];
+  const root = createRoot(document.body);
+  let unregister: (() => void) | undefined;
+  try {
+    await act(async () => root.render(h(Settings, { pages })));
+    await act(async () => document.querySelector<HTMLButtonElement>('[data-native-counter]')!.click());
+    expect(activeEffects).toBe(1);
+    unregister = registerProperties(feedManager, gameDetails);
+    await act(async () => root.render(h(Settings, { pages })));
+    expect(document.body.textContent).toContain('External Data Sources');
+    expect(document.querySelector('[data-native-counter]')?.textContent).toBe('native:1');
+    expect(activeEffects).toBe(1);
+    await act(async () => document.querySelector<HTMLButtonElement>('[data-native-counter]')!.click());
+    expect(document.querySelector('[data-native-counter]')?.textContent).toBe('native:2');
+    unregister();
+    unregister = undefined;
+    await act(async () => root.render(h(Settings, { pages })));
+    expect(document.body.textContent).not.toContain('External Data Sources');
+    expect(activeEffects).toBe(1);
+    await act(async () => document.querySelector<HTMLButtonElement>('[data-native-counter]')!.click());
+    expect(document.querySelector('[data-native-counter]')?.textContent).toBe('native:3');
+  } finally {
+    unregister?.();
+    await act(async () => root.unmount());
+    expect(activeEffects).toBe(0);
+    runtime.nativeModuleCandidates = [];
+    feedManager.dispose();
+    gameDetails.dispose();
+  }
+});
 
 test('properties controls save immediately without saving an unsaved feed URL', async () => {
   document.body.replaceChildren();
@@ -23,12 +70,13 @@ test('properties controls save immediately without saving an unsaved feed URL', 
   try {
     await act(async () => { root.render(h(ExternalNewsSource, { appId: id, manager: feedManager })); await tick(); });
     const section = document.querySelector<HTMLElement>('.DialogControlsSection')!;
-    const dropdownSection = document.querySelectorAll<HTMLElement>('.DialogControlsSection')[1];
+    expect(document.querySelectorAll('.DialogControlsSection')).toHaveLength(1);
+    const dropdownSection = section.querySelector<HTMLElement>('[data-native-dropdown]')!;
     const dropdown = dropdownSection.querySelector<HTMLSelectElement>('select')!;
     const row = section.querySelector('[data-native-toggle]')!;
     const toggle = row.querySelector<HTMLButtonElement>('[role="checkbox"]')!;
-    expect(section.style.width).toBe('100%');
-    expect(dropdownSection.style.width).toBe('100%');
+    expect(section.style.width).toBe('');
+    expect(dropdownSection.style.width).toBe('');
     expect(dropdownSection.querySelector('span')?.textContent).toBe("Max Items in What's New");
     expect(dropdownSection.querySelector('small')?.textContent).toBe("Select how many items from this feed can appear in What's New");
     expect([...dropdown.options].map(option => option.textContent)).toEqual(['Unlimited', '1', '2', '3', '4', '5']);
@@ -38,7 +86,7 @@ test('properties controls save immediately without saving an unsaved feed URL', 
     await act(async () => { toggle.click(); await tick(); });
     expect(toggle.getAttribute('aria-checked')).toBe('false');
     expect(runtime.shown[id]).toBe(false);
-    await act(async () => { dropdown.value = '0'; dropdown.dispatchEvent(new dom.window.Event('change', { bubbles: true })); await tick(); });
+    await selectOption(dropdown, '0');
     expect(runtime.maxed[id]).toBe(0);
     expect(dropdown.value).toBe('0');
     expect(runtime.saved[id]).toBe(url);
@@ -46,8 +94,8 @@ test('properties controls save immediately without saving an unsaved feed URL', 
     expect(fetches).toBe(0);
     const restart = new FeedManager();
     await restart.load();
-    expect(restart.showFeedInWhatsNew[id]).toBe(false);
-    expect(restart.maxItemsFromFeedInWhatsNew[id]).toBe(0);
+    expect(restart.sources[id]?.showFeedInWhatsNew).toBe(false);
+    expect(restart.sources[id]?.maxItemsFromFeedInWhatsNew).toBe(0);
     restart.dispose();
 
     await act(async () => { root.render(h(ExternalNewsSource, { key: otherId, appId: otherId, manager: feedManager })); await tick(); });
@@ -56,15 +104,15 @@ test('properties controls save immediately without saving an unsaved feed URL', 
     expect(emptyFeedToggle.getAttribute('aria-checked')).toBe('true');
     expect(emptyFeedDropdown.value).toBe('3');
     await act(async () => { emptyFeedToggle.click(); await tick(); });
-    await act(async () => { emptyFeedDropdown.value = '5'; emptyFeedDropdown.dispatchEvent(new dom.window.Event('change', { bubbles: true })); await tick(); });
+    await selectOption(emptyFeedDropdown, '5');
     expect(runtime.saved[otherId]).toBeUndefined();
     expect(runtime.shown[otherId]).toBe(false);
     expect(runtime.maxed[otherId]).toBe(5);
     const flagOnlyRestart = new FeedManager();
     await flagOnlyRestart.load();
-    expect(flagOnlyRestart.values[otherId]).toBeUndefined();
-    expect(flagOnlyRestart.showFeedInWhatsNew[otherId]).toBe(false);
-    expect(flagOnlyRestart.maxItemsFromFeedInWhatsNew[otherId]).toBe(5);
+    expect(flagOnlyRestart.sources[otherId]?.url).toBe('');
+    expect(flagOnlyRestart.sources[otherId]?.showFeedInWhatsNew).toBe(false);
+    expect(flagOnlyRestart.sources[otherId]?.maxItemsFromFeedInWhatsNew).toBe(5);
     flagOnlyRestart.dispose();
 
     backend.setShowFeedInWhatsNew = async () => { throw new Error('disk error'); };
@@ -73,7 +121,7 @@ test('properties controls save immediately without saving an unsaved feed URL', 
     expect(runtime.shown[otherId]).toBe(false);
     expect(document.querySelector('[role="alert"]')?.textContent).toContain('disk error');
     backend.setMaxItemsFromFeedInWhatsNew = async () => { throw new Error('disk error'); };
-    await act(async () => { emptyFeedDropdown.value = '4'; emptyFeedDropdown.dispatchEvent(new dom.window.Event('change', { bubbles: true })); await tick(); });
+    await selectOption(emptyFeedDropdown, '4');
     expect(runtime.maxed[otherId]).toBe(5);
     expect(emptyFeedDropdown.value).toBe('5');
   } finally {
@@ -108,7 +156,7 @@ test('plugin configuration exposes global numeric controls', async () => {
     expect([...section.options].map(option => option.textContent)).toEqual(['General', 'Feed Settings']);
     await act(async () => { section.value = 'general'; section.dispatchEvent(new dom.window.Event('change', { bubbles: true })); });
     expect(document.body.textContent).toContain('Right-click a non-Steam game');
-    expect(fields[0].closest<HTMLElement>('.DialogBody')?.style.display).toBe('none');
+    expect(window.getComputedStyle(fields[0].closest<HTMLElement>('.DialogBody')!).display).toBe('none');
   } finally {
     await act(async () => root.unmount());
     feedManager.dispose();
@@ -118,7 +166,7 @@ test('plugin configuration exposes global numeric controls', async () => {
 
 test('properties tab is added through Steam settings renderer without patching Array.map', async () => {
   const feedManager = new FeedManager();
-  const releaseDates = new ReleaseDateManager();
+  const gameDetails = new GameDetailsManager();
   const pages = [{ title: 'Shortcut', identifier: `/app/${id}/properties/shortcut`, content: null },
     { title: 'Playtime', identifier: `/app/${id}/properties/playtime`, content: null }];
   const Settings = forwardRef<unknown, { pages: typeof pages; page: string; onPageRequested?: (page: string) => void }>(function Settings(props, _ref) {
@@ -128,13 +176,24 @@ test('properties tab is added through Steam settings renderer without patching A
   });
   const settingsType = Settings as typeof Settings & { render: unknown };
   const originalRender = settingsType.render;
-  runtime.nativeModuleCandidates = [Settings];
+  const RouterContext = createContext<{ location: { pathname: string } } | null>(null);
+  runtime.nativeModuleCandidates = [Settings, RouterContext];
   const originalMap = Array.prototype.map;
   const root = createRoot(document.body);
-  const unregister = registerProperties(feedManager, releaseDates);
+  const unregister = registerProperties(feedManager, gameDetails);
   const requested: string[] = [];
+  const renderRoute = (pathname: string) => {
+    // The real adapter maps only native routes and falls back to its first page.
+    const nativePage = pages.find(page => page.identifier === pathname) || pages[0];
+    root.render(h(RouterContext.Provider, { value: { location: { pathname } } },
+      h(Settings, { pages, page: nativePage.identifier, onPageRequested: requestPage })));
+  };
+  const requestPage = (page: string) => {
+    requested.push(page);
+    renderRoute(page);
+  };
   try {
-    await act(async () => root.render(h(Settings, { pages, page: pages[0].identifier, onPageRequested: page => requested.push(page) })));
+    await act(async () => renderRoute(pages[0].identifier));
     expect(Array.prototype.map).toBe(originalMap);
     expect(pages).toHaveLength(2);
     expect([...document.querySelectorAll('button')].map(button => button.textContent)).toEqual(['Shortcut', 'Playtime', 'External Data Sources']);
@@ -153,7 +212,7 @@ test('properties tab is added through Steam settings renderer without patching A
     await act(async () => root.unmount());
     runtime.nativeModuleCandidates = [];
     feedManager.dispose();
-    releaseDates.dispose();
+    gameDetails.dispose();
   }
 });
 

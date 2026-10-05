@@ -12,19 +12,12 @@ export type Intercept<T, K extends MethodName<T>> = (
   args: Parameters<Method<T, K>>,
 ) => ReturnType<Method<T, K>>;
 
-/**
- * Own a group of hooks without removing later plugins' wrappers.
- */
+/** Own a group of hooks without removing later plugins' wrappers. */
 export class MethodHooks {
   private stopped = false;
   private restorations: (() => void)[] = [];
 
-  /**
-   * Wrap a method on the target object with the provided intercept function.
-   * @param target The object containing the method to wrap.
-   * @param name The name of the method to wrap.
-   * @param intercept The intercept function to apply to the method.
-   */
+  /** Wrap a method on the target object with the provided intercept function. */
   wrap<T extends object, K extends MethodName<T>>(target: T, name: K, intercept: Intercept<T, K>): void {
     const ownDescriptor = Object.getOwnPropertyDescriptor(target, name);
     let descriptor = ownDescriptor;
@@ -34,13 +27,17 @@ export class MethodHooks {
     const useSetter = ownDescriptor && !ownDescriptor.configurable && !!ownDescriptor.set;
     const originalGetter = useSetter ? undefined : descriptor?.get;
     const originalValue = originalGetter ? undefined : Reflect.get(target, name);
-    const hooks = this;
+    const isStopped = () => this.stopped;
+
     const replacement = function (this: T, ...args: Parameters<Method<T, K>>) {
       const original = () => {
         const method = originalGetter ? originalGetter.call(this) : originalValue;
         return method?.apply(this, args);
       };
-      return hooks.stopped ? original() : intercept(original, this, args);
+
+      return isStopped()
+        ? original()
+        : intercept(original, this, args);
     };
 
     // Configurable prototype getters (including MobX render getters) need a

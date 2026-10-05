@@ -8,13 +8,10 @@
   "concurrentFeedFetches": "Simultaneous feed fetches",
   "concurrentFeedFetchesDescription": "Maximum number of feeds fetched at once (1–8).",
   "externalNewsSource": "Nguồn tin tức bên ngoài",
-  "externalReleaseDate": "External Release Date",
   "releaseDate": "Release Date",
   "year": "Year",
   "month": "Month",
   "day": "Day",
-  "couldNotSaveReleaseDate": "Could not save release date.",
-  "couldNotRemoveReleaseDate": "Could not remove release date.",
   "chooseFeed": "Chọn nguồn cấp RSS hoặc Atom cho trò chơi này.",
   "showFeedInWhatsNew": "Hiển thị nguồn cấp trong Có gì mới",
   "maxItemsInWhatsNewTitle": "Số mục tối đa trong Có gì mới",
@@ -30,5 +27,12 @@
   "activity": "Hoạt động",
   "enterFeedUrl": "Nhập URL nguồn cấp HTTP hoặc HTTPS.",
   "couldNotSaveFeedSource": "Không thể lưu nguồn cấp.",
-  "couldNotRemoveFeedSource": "Không thể xóa nguồn cấp."
+  "couldNotRemoveFeedSource": "Không thể xóa nguồn cấp.",
+  "externalGameDetails": "Thông tin trò chơi bên ngoài",
+  "addedToLibraryDate": "Ngày thêm vào thư viện",
+  "developer": "Nhà phát triển",
+  "publisher": "Nhà phát hành",
+  "tags": "Nhãn",
+  "couldNotSaveGameDetails": "Không thể lưu thông tin trò chơi.",
+  "couldNotRemoveGameDetails": "Không thể xóa thông tin trò chơi."
 }

@@ -8,13 +8,10 @@
   "concurrentFeedFetches": "Simultaneous feed fetches",
   "concurrentFeedFetchesDescription": "Maximum number of feeds fetched at once (1–8).",
   "externalNewsSource": "Externe nieuwsbron",
-  "externalReleaseDate": "External Release Date",
   "releaseDate": "Release Date",
   "year": "Year",
   "month": "Month",
   "day": "Day",
-  "couldNotSaveReleaseDate": "Could not save release date.",
-  "couldNotRemoveReleaseDate": "Could not remove release date.",
   "chooseFeed": "Kies een RSS- of Atom-feed voor dit spel.",
   "showFeedInWhatsNew": "Feed tonen onder Nieuw",
   "maxItemsInWhatsNewTitle": "Max. items onder Nieuw",
@@ -30,5 +27,12 @@
   "activity": "Activiteit",
   "enterFeedUrl": "Voer een HTTP- of HTTPS-URL voor de feed in.",
   "couldNotSaveFeedSource": "Feedbron kon niet worden opgeslagen.",
-  "couldNotRemoveFeedSource": "Feedbron kon niet worden verwijderd."
+  "couldNotRemoveFeedSource": "Feedbron kon niet worden verwijderd.",
+  "externalGameDetails": "Externe speldetails",
+  "addedToLibraryDate": "Toegevoegd aan bibliotheek",
+  "developer": "Ontwikkelaar",
+  "publisher": "Uitgever",
+  "tags": "Tags",
+  "couldNotSaveGameDetails": "Speldetails konden niet worden opgeslagen.",
+  "couldNotRemoveGameDetails": "Speldetails konden niet worden verwijderd."
 }

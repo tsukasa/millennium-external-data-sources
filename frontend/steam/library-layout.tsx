@@ -36,11 +36,6 @@ export type SeekTarget = ComponentType<SeekTargetProps>;
 /**
  * Wraps Steam's library layout renderer to show external news for configured
  * non-Steam shortcuts in the activity section.
- * @param original Steam's original library layout renderer.
- * @param Seek Component used by Steam to register layout sections.
- * @param classes CSS class names for the library columns.
- * @param feedManager Feed configuration and change notifications.
- * @returns A renderer that adds the external news section when applicable.
  */
 export function createLibraryLayout(original: LayoutRenderer, Seek: SeekTarget, classes: LayoutClasses, feedManager: FeedManager): LayoutRenderer {
   const subscribe = (notify: () => void) => feedManager.subscribe(notify);
@@ -49,7 +44,7 @@ export function createLibraryLayout(original: LayoutRenderer, Seek: SeekTarget, 
   return function ExternalLibraryLayout(props) {
     useSyncExternalStore(subscribe, snapshot);
     const appId = String(props.overview.appid);
-    const url = feedManager.values[appId];
+    const url = feedManager.sources[appId]?.url;
     const enabled = !!url && isNonSteamId(props.overview.appid) && props.setSections.has('nonsteam');
 
     // Let Steam create its own SeekTargets. The source-backed sections are

@@ -8,13 +8,10 @@
   "concurrentFeedFetches": "Simultaneous feed fetches",
   "concurrentFeedFetchesDescription": "Maximum number of feeds fetched at once (1–8).",
   "externalNewsSource": "Externí zdroj zpráv",
-  "externalReleaseDate": "External Release Date",
   "releaseDate": "Release Date",
   "year": "Year",
   "month": "Month",
   "day": "Day",
-  "couldNotSaveReleaseDate": "Could not save release date.",
-  "couldNotRemoveReleaseDate": "Could not remove release date.",
   "chooseFeed": "Vyberte pro tuto hru kanál RSS nebo Atom.",
   "showFeedInWhatsNew": "Zobrazit kanál v Co je nového",
   "maxItemsInWhatsNewTitle": "Max. položek v Co je nového",
@@ -30,5 +27,12 @@
   "activity": "Aktivita",
   "enterFeedUrl": "Zadejte adresu URL kanálu HTTP nebo HTTPS.",
   "couldNotSaveFeedSource": "Zdroj kanálu se nepodařilo uložit.",
-  "couldNotRemoveFeedSource": "Zdroj kanálu se nepodařilo odstranit."
+  "couldNotRemoveFeedSource": "Zdroj kanálu se nepodařilo odstranit.",
+  "externalGameDetails": "Externí podrobnosti hry",
+  "addedToLibraryDate": "Přidáno do knihovny",
+  "developer": "Vývojář",
+  "publisher": "Vydavatel",
+  "tags": "Štítky",
+  "couldNotSaveGameDetails": "Podrobnosti hry se nepodařilo uložit.",
+  "couldNotRemoveGameDetails": "Podrobnosti hry se nepodařilo odstranit."
 }

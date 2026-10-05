@@ -8,13 +8,10 @@
   "concurrentFeedFetches": "Simultaneous feed fetches",
   "concurrentFeedFetchesDescription": "Maximum number of feeds fetched at once (1–8).",
   "externalNewsSource": "Sursă externă de știri",
-  "externalReleaseDate": "External Release Date",
   "releaseDate": "Release Date",
   "year": "Year",
   "month": "Month",
   "day": "Day",
-  "couldNotSaveReleaseDate": "Could not save release date.",
-  "couldNotRemoveReleaseDate": "Could not remove release date.",
   "chooseFeed": "Selectați un flux RSS sau Atom pentru acest joc.",
   "showFeedInWhatsNew": "Afișează fluxul în Noutăți",
   "maxItemsInWhatsNewTitle": "Max. elemente în Noutăți",
@@ -30,5 +27,12 @@
   "activity": "Activitate",
   "enterFeedUrl": "Introduceți un URL de flux HTTP sau HTTPS.",
   "couldNotSaveFeedSource": "Sursa fluxului nu a putut fi salvată.",
-  "couldNotRemoveFeedSource": "Sursa fluxului nu a putut fi eliminată."
+  "couldNotRemoveFeedSource": "Sursa fluxului nu a putut fi eliminată.",
+  "externalGameDetails": "Detalii externe despre joc",
+  "addedToLibraryDate": "Adăugat în bibliotecă",
+  "developer": "Dezvoltator",
+  "publisher": "Distribuitor",
+  "tags": "Etichete",
+  "couldNotSaveGameDetails": "Detaliile jocului nu au putut fi salvate.",
+  "couldNotRemoveGameDetails": "Detaliile jocului nu au putut fi eliminate."
 }

@@ -8,13 +8,10 @@
   "concurrentFeedFetches": "Simultaneous feed fetches",
   "concurrentFeedFetchesDescription": "Maximum number of feeds fetched at once (1–8).",
   "externalNewsSource": "Зовнішнє джерело новин",
-  "externalReleaseDate": "External Release Date",
   "releaseDate": "Release Date",
   "year": "Year",
   "month": "Month",
   "day": "Day",
-  "couldNotSaveReleaseDate": "Could not save release date.",
-  "couldNotRemoveReleaseDate": "Could not remove release date.",
   "chooseFeed": "Виберіть RSS- або Atom-стрічку для цієї гри.",
   "showFeedInWhatsNew": "Показувати стрічку в розділі «Що нового»",
   "maxItemsInWhatsNewTitle": "Макс. елементів у «Що нового»",
@@ -30,5 +27,12 @@
   "activity": "Активність",
   "enterFeedUrl": "Введіть URL-адресу стрічки HTTP або HTTPS.",
   "couldNotSaveFeedSource": "Не вдалося зберегти джерело стрічки.",
-  "couldNotRemoveFeedSource": "Не вдалося видалити джерело стрічки."
+  "couldNotRemoveFeedSource": "Не вдалося видалити джерело стрічки.",
+  "externalGameDetails": "Зовнішні відомості про гру",
+  "addedToLibraryDate": "Додано до бібліотеки",
+  "developer": "Розробник",
+  "publisher": "Видавець",
+  "tags": "Позначки",
+  "couldNotSaveGameDetails": "Не вдалося зберегти відомості про гру.",
+  "couldNotRemoveGameDetails": "Не вдалося видалити відомості про гру."
 }

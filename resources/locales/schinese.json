@@ -8,13 +8,10 @@
   "concurrentFeedFetches": "Simultaneous feed fetches",
   "concurrentFeedFetchesDescription": "Maximum number of feeds fetched at once (1–8).",
   "externalNewsSource": "外部新闻源",
-  "externalReleaseDate": "External Release Date",
   "releaseDate": "Release Date",
   "year": "Year",
   "month": "Month",
   "day": "Day",
-  "couldNotSaveReleaseDate": "Could not save release date.",
-  "couldNotRemoveReleaseDate": "Could not remove release date.",
   "chooseFeed": "请为此游戏选择 RSS 或 Atom 订阅源。",
   "showFeedInWhatsNew": "在“新情报速递”中显示订阅源",
   "maxItemsInWhatsNewTitle": "“新情报速递”中的最多条目数",
@@ -30,5 +27,12 @@
   "activity": "活动",
   "enterFeedUrl": "请输入 HTTP 或 HTTPS 订阅源 URL。",
   "couldNotSaveFeedSource": "无法保存订阅源。",
-  "couldNotRemoveFeedSource": "无法移除订阅源。"
+  "couldNotRemoveFeedSource": "无法移除订阅源。",
+  "externalGameDetails": "外部游戏详情",
+  "addedToLibraryDate": "添加至库的日期",
+  "developer": "开发商",
+  "publisher": "发行商",
+  "tags": "标签",
+  "couldNotSaveGameDetails": "无法保存游戏详情。",
+  "couldNotRemoveGameDetails": "无法移除游戏详情。"
 }

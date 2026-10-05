@@ -1,11 +1,13 @@
+import { retryInstall } from './retry-install';
 import { findModuleExport } from 'millennium';
-import { useState, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { ExternalNewsSource } from '../components/game-properties/external-news-source';
-import { ExternalReleaseDate } from '../components/game-properties/external-release-date';
+import { ExternalGameDetails } from '../components/game-properties/external-game-details';
 import { getPluginI18nString } from '../i18n';
 import { isNonSteamId } from './client';
+import { MethodHooks } from './method-hooks';
 import type { FeedManager } from '../feed/manager';
-import type { ReleaseDateManager } from '../release-date/manager';
+import type { GameDetailsManager } from '../game-details/manager';
 
 interface Page {
   title: string;
@@ -23,10 +25,13 @@ interface PagedSettings {
   render(props: PagedSettingsProps, ref: unknown): ReactNode;
 }
 
+interface RoutingContext {
+  _currentValue?: { location?: { pathname?: string } } | null;
+}
+
 /**
  * Returns the AppID for a Steam shortcut properties page.
  * Steam's route adapter passes these pages to the shared PagedSettings renderer.
- * @returns The AppID if it exists and is a non-Steam ID, otherwise undefined.
  */
 function shortcutAppId(pages: PagedSettingsProps['pages']): number | undefined {
   const first = pages[0];
@@ -40,14 +45,9 @@ function shortcutAppId(pages: PagedSettingsProps['pages']): number | undefined {
   return appId && isNonSteamId(appId) ? appId : undefined;
 }
 
-/**
- * Registers the properties pages for Steam's route adapter.
- * @param feedManager The manager responsible for handling external news feeds.
- * @param releaseDateManager The manager responsible for handling external release dates.
- * @returns A function to restore the original settings renderer.
- */
-export function registerProperties(feedManager: FeedManager, releaseDateManager: ReleaseDateManager): () => void {
-  let restore: (() => void) | undefined;
+/** Registers the properties pages for Steam's route adapter. */
+export function registerProperties(feedManager: FeedManager, gameDetailsManager: GameDetailsManager): () => void {
+  const hooks = new MethodHooks();
 
   const install = () => {
     const settings = findModuleExport(value => value && typeof value === 'object'
@@ -58,23 +58,22 @@ export function registerProperties(feedManager: FeedManager, releaseDateManager:
     if (!settings)
       return false;
 
-    const original = settings.render;
-    let stopped = false;
+    let routingContext: RoutingContext | undefined;
 
-    const render: PagedSettings['render'] = function(props, ref) {
-      // This hook runs for every PagedSettings render so React's hook order stays stable.
-      const [selectedPluginPage, selectPluginPage] = useState<string>();
-
-      if (stopped)
-        return original(props, ref);
-
+    hooks.wrap(settings, 'render', (original, _instance, args) => {
+      // Keep Steam's hooks on their original component. Adding hooks or moving
+      // the renderer to a child would
+      // change the state/effect lifecycle of already mounted settings.
+      const [props] = args;
       const appId = shortcutAppId(props.pages);
+
       if (!appId)
-        return original(props, ref);
+        return original();
 
       const identifier = `/app/${appId}/properties/external-data-sources`;
+
       if (props.pages.some(page => typeof page !== 'string' && page.identifier === identifier))
-        return original(props, ref);
+        return original();
 
       const page: Page = {
         title: getPluginI18nString('externalDataSources'),
@@ -82,40 +81,33 @@ export function registerProperties(feedManager: FeedManager, releaseDateManager:
         content: (
           <div className="DialogBody">
             <ExternalNewsSource key={appId} appId={String(appId)} manager={feedManager} />
-            <ExternalReleaseDate key={`release-date-${appId}`} appId={String(appId)} manager={releaseDateManager} />
+            <ExternalGameDetails key={`game-details-${appId}`} appId={String(appId)} manager={gameDetailsManager} />
           </div>
         ),
       };
 
-      return original({
+      // Steam's route adapter knows only native tabs and supplies the first tab
+      // for our route. Read the provider's current route during this render;
+      // the adapter's own router subscription already causes navigation updates.
+      routingContext ||= findModuleExport(value => value?.Provider
+        && typeof value._currentValue?.location?.pathname === 'string') as RoutingContext | undefined;
+
+      args[0] = {
         ...props,
         pages: [...props.pages, page],
-        page: selectedPluginPage === identifier ? identifier : props.page,
-        onPageRequested: requested => {
-          selectPluginPage(requested === identifier ? identifier : undefined);
-          props.onPageRequested?.(requested);
-        },
-      }, ref);
-    };
+        page: routingContext?._currentValue?.location?.pathname === identifier ? identifier : props.page,
+      };
 
-    settings.render = render;
-
-    restore = () => {
-      stopped = true;
-      if (settings.render === render)
-        settings.render = original;
-    };
+      return original();
+    });
 
     return true;
   };
 
-  const installTimer = install() ? undefined : setInterval(() => {
-    if (install())
-      clearInterval(installTimer);
-  }, 250);
+  const stopInstalling = retryInstall(install, 250);
 
   return () => {
-    clearInterval(installTimer);
-    restore?.();
+    stopInstalling();
+    hooks.restore();
   };
 }

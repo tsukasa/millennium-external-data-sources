@@ -8,13 +8,10 @@
   "concurrentFeedFetches": "Simultaneous feed fetches",
   "concurrentFeedFetchesDescription": "Maximum number of feeds fetched at once (1–8).",
   "externalNewsSource": "Ulkoinen uutislähde",
-  "externalReleaseDate": "External Release Date",
   "releaseDate": "Release Date",
   "year": "Year",
   "month": "Month",
   "day": "Day",
-  "couldNotSaveReleaseDate": "Could not save release date.",
-  "couldNotRemoveReleaseDate": "Could not remove release date.",
   "chooseFeed": "Valitse tälle pelille RSS- tai Atom-syöte.",
   "showFeedInWhatsNew": "Näytä syöte Peliuutiset-osiossa",
   "maxItemsInWhatsNewTitle": "Enimmäismäärä Peliuutiset-osiossa",
@@ -30,5 +27,12 @@
   "activity": "Toiminta",
   "enterFeedUrl": "Anna syötteen HTTP- tai HTTPS-osoite.",
   "couldNotSaveFeedSource": "Syötelähdettä ei voitu tallentaa.",
-  "couldNotRemoveFeedSource": "Syötelähdettä ei voitu poistaa."
+  "couldNotRemoveFeedSource": "Syötelähdettä ei voitu poistaa.",
+  "externalGameDetails": "Ulkoiset pelitiedot",
+  "addedToLibraryDate": "Lisätty kirjastoon",
+  "developer": "Kehittäjä",
+  "publisher": "Julkaisija",
+  "tags": "Tunnisteet",
+  "couldNotSaveGameDetails": "Pelitietoja ei voitu tallentaa.",
+  "couldNotRemoveGameDetails": "Pelitietoja ei voitu poistaa."
 }

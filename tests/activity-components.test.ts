@@ -1,13 +1,21 @@
 import { beforeEach, expect, test } from 'bun:test';
 import { act, Component, createElement as h } from 'react';
-import { createRoot } from 'react-dom/client';
-import { installBackend, FeedManager, registerActivityComponents, id, url } from './helpers/ui-runtime';
+import { createRoot } from './helpers/ui-runtime';
+import { installBackend, FeedManager, registerActivityComponents, id, url, runtime } from './helpers/ui-runtime';
 
 beforeEach(installBackend);
 
 test('native activity controls are removed, actions disabled and later plugin wrappers survive cleanup', async () => {
   document.body.replaceChildren();
   const calls: string[] = [];
+  const uploads: string[] = [];
+  class Tracker {
+    QueueForUpload(marking: { event_gid(): string }) { uploads.push(marking.event_gid()); }
+    MarkEventShown(gid: string) { this.QueueForUpload({ event_gid: () => gid }); }
+    MarkEventRead(gid: string) { this.QueueForUpload({ event_gid: () => gid }); }
+  }
+  const previousModules = runtime.nativeModuleCandidates;
+  runtime.nativeModuleCandidates = [...previousModules, Tracker];
   class Post extends Component<any> {
     render() { return h('textarea', { 'data-native-post': true }); }
   }
@@ -28,12 +36,18 @@ test('native activity controls are removed, actions disabled and later plugin wr
     })); }
   }
   const feedManager = new FeedManager();
-  feedManager.values[id] = url;
+  feedManager.sources[id] = { url, showFeedInWhatsNew: true };
   const native = { Section, PostTextEntry: Post, Announcement } as unknown as import('../frontend/steam/news-discovery').NativeBindings;
   const originalPost = Post.prototype.render;
   const cleanup = registerActivityComponents(feedManager, native);
   const root = createRoot(document.body);
   try {
+    const tracker = new Tracker();
+    tracker.MarkEventShown(`external-news:${id}:article`);
+    tracker.MarkEventRead(`external-news:${id}:article`);
+    expect(uploads).toEqual([]);
+    tracker.MarkEventShown('native-event');
+    expect(uploads).toEqual(['native-event']);
     await act(async () => root.render(h(Section, { appid: Number(id) })));
     expect(document.querySelector('textarea')).toBeNull();
     expect(document.querySelector('section')?.hasAttribute('data-external-news-activity')).toBe(true);
@@ -69,6 +83,7 @@ test('native activity controls are removed, actions disabled and later plugin wr
     Post.prototype.render = originalPost;
   } finally {
     cleanup();
+    runtime.nativeModuleCandidates = previousModules;
     await act(async () => root.unmount());
     feedManager.dispose();
   }

@@ -8,13 +8,10 @@
   "concurrentFeedFetches": "Simultaneous feed fetches",
   "concurrentFeedFetchesDescription": "Maximum number of feeds fetched at once (1–8).",
   "externalNewsSource": "Extern nyhetskälla",
-  "externalReleaseDate": "External Release Date",
   "releaseDate": "Release Date",
   "year": "Year",
   "month": "Month",
   "day": "Day",
-  "couldNotSaveReleaseDate": "Could not save release date.",
-  "couldNotRemoveReleaseDate": "Could not remove release date.",
   "chooseFeed": "Välj ett RSS- eller Atom-flöde för det här spelet.",
   "showFeedInWhatsNew": "Visa flödet i Nyheter",
   "maxItemsInWhatsNewTitle": "Max. antal objekt i Nyheter",
@@ -30,5 +27,12 @@
   "activity": "Aktivitet",
   "enterFeedUrl": "Ange en HTTP- eller HTTPS-URL för flödet.",
   "couldNotSaveFeedSource": "Det gick inte att spara flödeskällan.",
-  "couldNotRemoveFeedSource": "Det gick inte att ta bort flödeskällan."
+  "couldNotRemoveFeedSource": "Det gick inte att ta bort flödeskällan.",
+  "externalGameDetails": "Extern spelinformation",
+  "addedToLibraryDate": "Tillagt i biblioteket",
+  "developer": "Utvecklare",
+  "publisher": "Utgivare",
+  "tags": "Taggar",
+  "couldNotSaveGameDetails": "Kunde inte spara spelinformationen.",
+  "couldNotRemoveGameDetails": "Kunde inte ta bort spelinformationen."
 }

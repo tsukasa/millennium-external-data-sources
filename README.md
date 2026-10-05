@@ -1,34 +1,66 @@
 # External Data Sources Plugin for Millennium
 
-A Millennium plugin that adds external data integration for non-Steam games.
+A Millennium plugin that adds external data integration for non-Steam games:
 
-The plugin displays RSS or Atom feeds on a game's Activity and the library's What's New, in both Desktop and Big Picture.
-
-It also lets you assign a release date to a non-Steam game for library sorting.
+**Add RSS/Atom newsfeeds for non-Steam games.**
 
 ![External news for a non-Steam game in Steam](.github/assets/external_data_sources_01.png)
+
+Your favorite game is not on Steam. You add it as a non-Steam game. Now you are missing all the hot updates? No more! Add a blog, a fansite, official news or even a forum feed. Stay up-to-date on what is going on straight from within Steam.
+
+And yes, of course the news items show up on "What's New" as well! Unless you do not want them to. Control whether a feed shows up in "What's New" and how many entries are being displayed. Choose between a modest number - or let a single feed take over the entire section.
+
+**Set release date, added to library data, developer/publisher for non-Steam games and add Steam store tags to non-Steam games.**
+
+![Non-Steam game properties](.github/assets/external_data_sources_02.gif)
+
+Your non-Steam games always sit at the end of your release date or added to library date sorting. Set exactly when a game came out and at what date you added it to your library.
+
+Of course, there is more to life than just sorting; filtering is just as important. Add Steam store tags as well as pseudo-tags to your non-Steam games, so dynamic collections automatically pick up the games and filtering by store tags, genre or players will yield the expected results. The perfect tag does not exist on Steam? Just add whatever local pseudo-tag you want! Pseudo-tags only exist on your local client.
+
+**Works in both Desktop and Big Picture mode.**
+
+No matter whether you are sitting in your chair or on the couch - the External Data Sources plugin supports both modes.
+
+*<u>Note:</u> Desktop mode is the primary target for this plugin!*
+
+
+## Data storage and Steam services
+
+Plugin settings and game metadata are saved in Millennium's local configuration.
+The plugin reads Steam data and adds metadata and news to in-memory library views;
+it does not upload these overrides or synthetic news events to Steam.
+Feed downloads use HTTP GET requests to the configured source.
+
+Custom tags work in local Library Filters. Saving a collection containing custom
+tag IDs to Steam Cloud is blocked, and those IDs are excluded from Store search
+links. Steam's normal actions on native games and collections remain available.
+
+In other words: Nothing leaves your machine.
 
 
 ## How to Install
 
-1. Go to the [Releases page](../../releases/latest) and download the latest `io.tsukasa.millennium.external-data-sources.star` file.
+1. Go to the [Releases page](../../releases/latest) and download the latest `io.tsukasa.external-data-sources.star` file.
 2. Place the `.star` file in your Millennium plugin folder.
 3. Open your Millennium settings and confirm that **External Data Sources** is listed and enabled.
 
 
 ## How to Use
 
+
+### Feeds
+
+To configure a newsfeed for a non-Steam game, do the following:
 1. Right-click a non-Steam game and select **Properties** → **External Data Sources**.
 2. Enter a fully qualified HTTP or HTTPS URL for an RSS 2.0 or Atom 1.0 feed.
 3. Click **Save** to save the settings for the game and refresh the news view.
 4. Click **Clear** to remove the source and restore Steam's default behavior.
 
-To set a release date, use the **External Release Date** section on the same page.
-The saved date updates library sorting without navigating away from the current page.
-
 Note: You can save exactly one feed per shortcut AppID.
 
 When displaying feed items, the plugin automatically tries to select an image from the feed.
+
 If an item has no image, the plugin uses the game's hero artwork when available. Items without dates appear at the end of the list.
 
 Clicking an article opens it in your default browser or Big Picture's integrated browser.
@@ -37,8 +69,28 @@ If a feed refresh fails, the last successful feed items remain visible. The plug
 
 Successfully retrieved feeds are cached for ten minutes by default. In Millennium's plugin settings, you can set a global refresh interval of 10 to 360 minutes and the number of simultaneous background feed fetches (1 to 8). Changing a feed source invalidates its cache.
 
+
+### Game Data
+
+To configure game data, do the following:
+
+1. Right-click a non-Steam game and select **Properties** → **External Data Sources**.
+2. Scroll down to the **External Game Data** section.
+3. Set a release date or remove it by setting one field to "--".
+4. Add a developer or publisher by entering the name and clicking the "+" button.
+5. Add Steam store tags by typing a search term and selecting matching tags.
+6. For pseudo-tags you can simply enter a tag name and press enter.
+7. To remove a tag, click the "x" in its chip.
+
+The date fields have an impact on specific sorting-order modes of the library. If no date is set, Steam's default behavior takes precendence.
+
+Adding appropriate tags to a non-Steam game allows the game to appear in Steam's library filtering as well as dynamic collections.
+
+
+### Configuration Storage
+
 Per-game feed settings are stored in Millennium's persistent plugin configuration
-under `plugins["io.tsukasa.millennium.external-data-sources"].config["<appid>"].feed` in the Millennium `config.json`.
+under `plugins["io.tsukasa.external-data-sources"].config["<appid>"].feed` in the Millennium `config.json`.
 
 Removing a non-Steam shortcut from the Steam library also removes its configured feed and release date.
 
@@ -85,10 +137,6 @@ Detailed acknowledgements are included in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_N
 
 
 ## FAQ
-
-**Q: Does this plugin support Big Picture mode or the main Library's What's New view?**
-
-Yes, it does! You should see the news feed items on both your "What's New" section as well as your game detail page - in both the desktop client, as well as in Big Picture mode.
 
 **Q: Why is this plugin not available on Millennium's plugin page?**
 

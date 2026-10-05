@@ -8,13 +8,10 @@
   "concurrentFeedFetches": "Simultaneous feed fetches",
   "concurrentFeedFetchesDescription": "Maximum number of feeds fetched at once (1–8).",
   "externalNewsSource": "Sumber Berita Luaran",
-  "externalReleaseDate": "External Release Date",
   "releaseDate": "Release Date",
   "year": "Year",
   "month": "Month",
   "day": "Day",
-  "couldNotSaveReleaseDate": "Could not save release date.",
-  "couldNotRemoveReleaseDate": "Could not remove release date.",
   "chooseFeed": "Pilih suapan RSS atau Atom untuk permainan ini.",
   "showFeedInWhatsNew": "Tunjukkan suapan dalam bahagian Baharu",
   "maxItemsInWhatsNewTitle": "Item maksimum dalam bahagian Baharu",
@@ -30,5 +27,12 @@
   "activity": "Aktiviti",
   "enterFeedUrl": "Masukkan URL suapan HTTP atau HTTPS.",
   "couldNotSaveFeedSource": "Sumber suapan tidak dapat disimpan.",
-  "couldNotRemoveFeedSource": "Sumber suapan tidak dapat dialih keluar."
+  "couldNotRemoveFeedSource": "Sumber suapan tidak dapat dialih keluar.",
+  "externalGameDetails": "Butiran Permainan Luaran",
+  "addedToLibraryDate": "Ditambah ke Pustaka",
+  "developer": "Pembangun",
+  "publisher": "Penerbit",
+  "tags": "Tag",
+  "couldNotSaveGameDetails": "Tidak dapat menyimpan butiran permainan.",
+  "couldNotRemoveGameDetails": "Tidak dapat membuang butiran permainan."
 }

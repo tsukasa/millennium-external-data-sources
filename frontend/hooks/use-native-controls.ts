@@ -30,10 +30,7 @@ export interface NativeControls {
 
 type DropdownMenuOptions = ComponentProps<typeof DropdownItem>['contextMenuPositionOptions'];
 
-/**
- * Resolve native property controls once per mounted editor.
- * @returns An object containing the native ToggleRow and DropdownRow components.
- */
+/** Resolve native property controls once per mounted editor. */
 export function useNativeControls(): NativeControls {
   return useMemo(() => {
     const nativeToggle = findModuleExport(value => typeof value === 'function'

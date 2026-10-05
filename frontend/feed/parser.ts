@@ -1,23 +1,15 @@
 import type { NewsItem } from './types';
 
-/**
- * Returns direct child elements with the given local name.
- */
+/** Returns direct child elements with the given local name. */
 const children = (element: Element, name: string) => Array.from(element.children).filter(child => child.localName === name);
 
-/**
- * Returns the first direct child element with the given local name.
- */
+/** Returns the first direct child element with the given local name. */
 const child = (element: Element, name: string) => children(element, name)[0];
 
-/**
- * Returns trimmed text from the first matching direct child element.
- */
+/** Returns trimmed text from the first matching direct child element. */
 const text = (element: Element, name: string) => child(element, name)?.textContent?.trim() || '';
 
-/**
- * Resolves inherited xml:base attributes from the feed root through an element.
- */
+/** Resolves inherited xml:base attributes from the feed root through an element. */
 function baseUrl(element: Element, source: string): string {
   const chain: Element[] = [];
 
@@ -35,16 +27,12 @@ function baseUrl(element: Element, source: string): string {
   return source;
 }
 
-/**
- * Extracts visible text from an HTML fragment and normalizes whitespace.
- */
+/** Extracts visible text from an HTML fragment and normalizes whitespace. */
 function plainText(value: string, parser: DOMParser): string {
   return documentText(parser.parseFromString(value, 'text/html'));
 }
 
-/**
- * Extracts visible text from an HTML document and normalizes whitespace.
- */
+/** Extracts visible text from an HTML document and normalizes whitespace. */
 function documentText(html: Document): string {
   html.querySelectorAll('script,style,iframe,object')
     .forEach(node => node.remove());
@@ -54,12 +42,7 @@ function documentText(html: Document): string {
     .trim();
 }
 
-/**
- * Resolves a URL and accepts only HTTP or HTTPS destinations.
- * @param value URL to validate or resolve.
- * @param base Optional base URL for relative values.
- * @returns The absolute URL, or undefined if it is invalid or unsupported.
- */
+/** Resolves a URL and accepts only HTTP or HTTPS destinations. */
 export function httpUrl(value: string, base?: string): string | undefined {
   try {
     const url = new URL(value, base);
@@ -69,13 +52,50 @@ export function httpUrl(value: string, base?: string): string | undefined {
   }
 }
 
+function entryUrl(entry: Element, atom: boolean, source: string): string | undefined {
+  const link = atom
+    ? children(entry, 'link').find(node => !node.getAttribute('rel') || node.getAttribute('rel') === 'alternate')
+    : child(entry, 'link');
+  const rawLink = atom
+    ? link?.getAttribute('href') || ''
+    : link?.textContent?.trim() || '';
+  return rawLink
+    ? httpUrl(rawLink, baseUrl(link || entry, source))
+    : undefined;
+}
+
+function entryImage(entry: Element, atom: boolean, source: string, content: Element | undefined, html: Document): string | undefined {
+  const media = Array.from(entry.getElementsByTagName('*')).filter(node =>
+    node.namespaceURI === 'http://search.yahoo.com/mrss/' && ['content', 'thumbnail'].includes(node.localName));
+
+  const enclosure = children(entry, atom ? 'link' : 'enclosure').filter(node =>
+    (!atom || node.getAttribute('rel') === 'enclosure') && (node.getAttribute('type') || '').startsWith('image/'));
+
+  let image: string | undefined;
+
+  for (const node of [...media, ...enclosure]) {
+    const value = node.getAttribute('url') || node.getAttribute('href');
+
+    if (value && (!node.getAttribute('type') || node.getAttribute('type')!.startsWith('image/'))) {
+      image = httpUrl(value, baseUrl(node, source));
+
+      if (image)
+        break;
+    }
+  }
+
+  if (!image) {
+    const value = html.querySelector('img[src]')?.getAttribute('src');
+    if (value)
+      image = httpUrl(value, baseUrl(content || entry, source));
+  }
+
+  return image;
+}
+
 /**
  * Parses an RSS 2.0 or Atom 1.0 feed into deduplicated news items, newest first.
  * Entries without a valid HTTP or HTTPS link are omitted.
- * @param xml Feed XML to parse.
- * @param source Feed URL used to resolve relative links.
- * @param parser DOM parser, injectable for testing.
- * @returns Normalized news items.
  * @throws If the XML is invalid or is not a supported feed format.
  */
 export function parseFeed(xml: string, source: string, parser = new DOMParser()): NewsItem[] {
@@ -98,15 +118,7 @@ export function parseFeed(xml: string, source: string, parser = new DOMParser())
   const items: NewsItem[] = [];
 
   for (const entry of entries) {
-    const link = atom
-      ? children(entry, 'link').find(node => !node.getAttribute('rel') || node.getAttribute('rel') === 'alternate')
-      : child(entry, 'link');
-    const rawLink = atom
-      ? link?.getAttribute('href') || ''
-      : link?.textContent?.trim() || '';
-    const url = rawLink
-      ? httpUrl(rawLink, baseUrl(link || entry, source))
-      : undefined;
+    const url = entryUrl(entry, atom, source);
 
     if (!url)
       continue;
@@ -121,32 +133,7 @@ export function parseFeed(xml: string, source: string, parser = new DOMParser())
     const content = child(entry, atom ? 'content' : 'encoded') || child(entry, atom ? 'summary' : 'description');
     const rawContent = content?.getAttribute('type') === 'xhtml' ? content.innerHTML : content?.textContent || '';
     const html = parser.parseFromString(rawContent, 'text/html');
-
-    const media = Array.from(entry.getElementsByTagName('*')).filter(node =>
-      node.namespaceURI === 'http://search.yahoo.com/mrss/' && ['content', 'thumbnail'].includes(node.localName));
-
-    const enclosure = children(entry, atom ? 'link' : 'enclosure').filter(node =>
-      (!atom || node.getAttribute('rel') === 'enclosure') && (node.getAttribute('type') || '').startsWith('image/'));
-
-    let image: string | undefined;
-
-    for (const node of [...media, ...enclosure]) {
-      const value = node.getAttribute('url') || node.getAttribute('href');
-
-      if (value && (!node.getAttribute('type') || node.getAttribute('type')!.startsWith('image/'))) {
-        image = httpUrl(value, baseUrl(node, source));
-
-        if (image)
-          break;
-      }
-    }
-
-    if (!image) {
-      const value = html.querySelector('img[src]')?.getAttribute('src');
-      if (value)
-        image = httpUrl(value, baseUrl(content || entry, source));
-    }
-
+    const image = entryImage(entry, atom, source, content, html);
     const timestamp = Date.parse(text(entry, atom ? 'published' : 'pubDate') || text(entry, atom ? 'updated' : 'date'));
 
     items.push({

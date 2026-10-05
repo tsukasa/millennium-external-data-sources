@@ -18,8 +18,6 @@ export class FeedCache {
   setRefreshInterval(minutes: number) { this.ttlMs = minutes * 60_000; }
 
   /**
-   * @param fetcher Fetches the raw response for an app ID.
-   * @param now Clock used to determine cache expiration.
    */
   constructor(
     private fetcher: (appId: string) => Promise<string>,
@@ -27,9 +25,7 @@ export class FeedCache {
     private onParsed?: (stats: FeedParseStats) => void,
   ) {}
 
-  /**
-   * Notifies consumers when a parsed feed replaces a cached entry.
-   */
+  /** Notifies consumers when a parsed feed replaces a cached entry. */
   subscribe(listener: () => void) {
     this.listeners.add(listener);
 
@@ -38,9 +34,7 @@ export class FeedCache {
     };
   }
 
-  /**
-   * Returns only fresh cached items without starting a request.
-   */
+  /** Returns only fresh cached items without starting a request. */
   peek(url: string): NewsItem[] | undefined {
     const entry = this.entries.get(url);
 
@@ -49,32 +43,33 @@ export class FeedCache {
       : undefined;
   }
 
-  /**
-   * Returns the last successful result, including after it expires for refetching.
-   */
+  /** Returns the last successful result, including after it expires for refetching. */
   peekLast(url: string): NewsItem[] | undefined {
     return this.entries.get(url)?.items;
   }
 
   /**
-   * Removes the cached entry and pending request for a feed URL.
+   * Returns the time remaining until the cached entry expires.
+   * Milliseconds until the last successful result expires, or undefined if absent.
    */
+  refreshDelay(url: string): number | undefined {
+    const entry = this.entries.get(url);
+    return entry && Math.max(0, entry.time + this.ttlMs - this.now());
+  }
+
+  /** Removes the cached entry and pending request for a feed URL. */
   invalidate(url: string) {
     this.entries.delete(url);
     this.pending.delete(url);
   }
 
-  /**
-   * Removes all cached entries and pending requests.
-   */
+  /** Removes all cached entries and pending requests. */
   clear() {
     this.entries.clear(); this.pending.clear();
   }
 
   /**
    * Returns news items for a feed, fetching and parsing them when the cache expires.
-   * @param appId App ID passed to the fetcher.
-   * @param url Expected feed URL and cache key.
    * @throws If the response URL differs from the requested feed URL.
    */
   get(appId: string, url: string): Promise<NewsItem[]> {

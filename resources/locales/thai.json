@@ -8,13 +8,10 @@
   "concurrentFeedFetches": "Simultaneous feed fetches",
   "concurrentFeedFetchesDescription": "Maximum number of feeds fetched at once (1–8).",
   "externalNewsSource": "แหล่งข่าวภายนอก",
-  "externalReleaseDate": "External Release Date",
   "releaseDate": "Release Date",
   "year": "Year",
   "month": "Month",
   "day": "Day",
-  "couldNotSaveReleaseDate": "Could not save release date.",
-  "couldNotRemoveReleaseDate": "Could not remove release date.",
   "chooseFeed": "เลือกฟีด RSS หรือ Atom สำหรับเกมนี้",
   "showFeedInWhatsNew": "แสดงฟีดใน มีอะไรใหม่",
   "maxItemsInWhatsNewTitle": "รายการสูงสุดใน มีอะไรใหม่",
@@ -30,5 +27,12 @@
   "activity": "กิจกรรม",
   "enterFeedUrl": "กรุณาป้อน URL ฟีดที่ใช้ HTTP หรือ HTTPS",
   "couldNotSaveFeedSource": "ไม่สามารถบันทึกแหล่งฟีดได้",
-  "couldNotRemoveFeedSource": "ไม่สามารถลบแหล่งฟีดได้"
+  "couldNotRemoveFeedSource": "ไม่สามารถลบแหล่งฟีดได้",
+  "externalGameDetails": "รายละเอียดเกมภายนอก",
+  "addedToLibraryDate": "วันที่เพิ่มลงในคลัง",
+  "developer": "ผู้พัฒนา",
+  "publisher": "ผู้จัดจำหน่าย",
+  "tags": "แท็ก",
+  "couldNotSaveGameDetails": "ไม่สามารถบันทึกรายละเอียดเกมได้",
+  "couldNotRemoveGameDetails": "ไม่สามารถลบรายละเอียดเกมได้"
 }

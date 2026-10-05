@@ -17,6 +17,13 @@ local FEED_CONCURRENCY_MAX = 8
 local FEED_ITEMS_MAX = 5
 local FEED_ITEMS_DEFAULT = 3
 local RELEASE_YEAR_MIN = 1960
+local GAME_DETAIL_FIELDS = {
+    releaseDate        = true,
+    addedToLibraryDate = true,
+    developer          = true,
+    publisher          = true,
+    tags               = true
+}
 
 
 -------------------------------------------------------------------------------
@@ -107,6 +114,7 @@ end
 --- @return string url Configured URL, or an empty string when absent
 local function getAppIdFeedUrl(app_id)
     local app = readAppConfig(app_id)
+
     return type(app.feed) == "string" and app.feed or ""
 end
 
@@ -119,29 +127,27 @@ local function isValidUrl(url)
         and not url:find("[%s%c]")
 end
 
---- A calendar date stored without a time or timezone.
---- @param date table Table containing year, month, and day fields
---- @return boolean valid Truthy if the date is valid
-local function isValidReleaseDate(date)
-    if type(date) ~= "table" then
+--- Validate a timezone-free ISO calendar date.
+--- @param date any Date to validate
+--- @return boolean valid Whether the date is valid
+local function isValidCalendarDate(date)
+    -- It is possible we have old values from < v0.1.2 stored
+    -- as tables rather than strings.
+    -- Ignore these values and report them as false.
+    if type(date) ~= "string" then
         return false
     end
 
-    local year, month, day = date.year, date.month, date.day
-    if type(year) ~= "number"
-        or type(month) ~= "number"
-        or type(day) ~= "number"
-        or year ~= math.floor(year)
-        or month ~= math.floor(month)
-        or day ~= math.floor(day)
-        or year < RELEASE_YEAR_MIN or year > os.date("*t").year + 1
+    local year, month, day = date:match("^(%d%d%d%d)%-(%d%d)%-(%d%d)$")
+    year, month, day = tonumber(year), tonumber(month), tonumber(day)
+
+    if not year or year < RELEASE_YEAR_MIN or year > os.date("*t").year + 1
         or month < 1 or month > 12 then
         return false
     end
 
     local daysPerMonth = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 }
 
-    -- Properly account for leap years
     if month == 2 and (year % 400 == 0 or (year % 4 == 0 and year % 100 ~= 0)) then
         daysPerMonth[2] = 29
     end
@@ -149,9 +155,44 @@ local function isValidReleaseDate(date)
     return day >= 1 and day <= daysPerMonth[month]
 end
 
+--- Helper function to normalize and validate lists of names.
+--- @param value string|table A single name or a list of names
+--- @return table A list of unique, trimmed names
+local function listNames(value, allowTagIds)
+    if type(value) == "string" then
+        value = { value }
+    end
+
+    assert(type(value) == "table", "Invalid name list")
+
+    local names, seen, count = {}, {}, 0
+
+    for key, name in pairs(value) do
+        local validIndex = type(key) == "number" and key >= 1 and key <= #value and key == math.floor(key)
+        local validTagId = allowTagIds and type(name) == "number"
+            and name > 0 and name <= 9007199254740991 and name == math.floor(name)
+        local validName = type(name) == "string" or validTagId
+        assert(validIndex and validName, "Invalid name list")
+        count = count + 1
+    end
+
+    assert(count == #value, "Invalid name list")
+
+    for _, name in ipairs(value) do
+        if type(name) == "string" then
+            name = name:match("^%s*(.-)%s*$")
+        end
+
+        if name ~= "" and not seen[name] then
+            names[#names + 1], seen[name] = name, true
+        end
+    end
+
+    return names
+end
 
 -------------------------------------------------------------------------------
---- Backend Functions                                                       ---
+--- Exported Backend FFI Functions                                          ---
 -------------------------------------------------------------------------------
 
 --- Remove a feed while preserving other fields under the same AppID.
@@ -215,53 +256,83 @@ function getFeedSources()
     return json.encode(sources)
 end
 
---- List configured release dates by non-Steam AppID.
+--- List valid game details by non-Steam AppID. Legacy date objects are not migrated.
 --- @ffi
---- @return string dates JSON object mapping AppIDs to calendar dates
-function getReleaseDates()
-    local dates = {}
+--- @return string details JSON object mapping AppIDs to game details
+function getGameDetails()
+    local details = {}
 
     for id, app in pairs(appConfigs()) do
-        if isValidReleaseDate(app.releaseDate) then
-            dates[id] = app.releaseDate
+        local entry = {}
+
+        for field in pairs(GAME_DETAIL_FIELDS) do
+            local value = app[field]
+
+            if field == "developer" or field == "publisher" or field == "tags" then
+                local ok, names = pcall(listNames, value, field == "tags")
+
+                if ok and #names > 0 then
+                    entry[field] = names
+                end
+            elseif isValidCalendarDate(value) then
+                entry[field] = value
+            end
+        end
+
+        if next(entry) then
+            details[id] = entry
         end
     end
 
-    return json.encode(dates)
+    return json.encode(details)
 end
 
---- Save a calendar date as one structured value in the AppID config.
+--- Save or clear one override while preserving feed and other game details.
 --- @ffi
 --- @param app_id string Non-Steam AppID
---- @param year number Calendar year
---- @param month number Calendar month, one through twelve
---- @param day number Day of the month
+--- @param field string Game detail field to update
+--- @param value string|table ISO date or JSON array of names; empty date/array clears
 --- @return boolean success True after the config is saved
-function setReleaseDate(app_id, year, month, day)
-    local date = { year = year, month = month, day = day }
+function setGameDetail(app_id, field, value)
+    assert(type(field) == "string" and GAME_DETAIL_FIELDS[field], "Invalid game detail field")
+    assert(type(value) == "string", "Invalid game detail value")
 
-    assert(isValidReleaseDate(date), "Invalid release date")
+    if field == "developer" or field == "publisher" or field == "tags" then
+        local decoded = json.decode(value)
+        assert(type(decoded) == "table", "Invalid name list")
+
+        value = listNames(decoded, field == "tags")
+
+        if #value == 0 then
+            value = nil
+        end
+    else
+        value = value:match("^%s*(.-)%s*$")
+        assert(value == "" or isValidCalendarDate(value), "Invalid calendar date")
+
+        if value == "" then
+            value = nil
+        end
+    end
 
     local app, key = readAppConfig(app_id)
-    app.releaseDate = date
+    app[field] = value
 
-    return writeAppConfig(key, app, "Could not save release date")
+    return writeAppConfig(key, app, "Could not save game details")
 end
 
---- Remove only the release date and preserve other AppID settings.
+--- Clear all game detail overrides after a shortcut is removed.
 --- @ffi
 --- @param app_id string Non-Steam AppID
 --- @return boolean success True after the config is cleared
-function clearReleaseDate(app_id)
+function clearGameDetails(app_id)
     local app, key = readAppConfig(app_id)
 
-    if app.releaseDate == nil then
-        return true
+    for field in pairs(GAME_DETAIL_FIELDS) do
+        app[field] = nil
     end
 
-    app.releaseDate = nil
-
-    return writeAppConfig(key, app, "Could not remove release date")
+    return writeAppConfig(key, app, "Could not remove game details")
 end
 
 --- Read global feed settings.

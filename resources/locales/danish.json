@@ -8,13 +8,10 @@
   "concurrentFeedFetches": "Simultaneous feed fetches",
   "concurrentFeedFetchesDescription": "Maximum number of feeds fetched at once (1–8).",
   "externalNewsSource": "Ekstern nyhedskilde",
-  "externalReleaseDate": "External Release Date",
   "releaseDate": "Release Date",
   "year": "Year",
   "month": "Month",
   "day": "Day",
-  "couldNotSaveReleaseDate": "Could not save release date.",
-  "couldNotRemoveReleaseDate": "Could not remove release date.",
   "chooseFeed": "Vælg et RSS- eller Atom-feed til dette spil.",
   "showFeedInWhatsNew": "Vis feed i Nyheder",
   "maxItemsInWhatsNewTitle": "Maks. elementer i Nyheder",
@@ -30,5 +27,12 @@
   "activity": "Aktivitet",
   "enterFeedUrl": "Indtast en HTTP- eller HTTPS-URL til feedet.",
   "couldNotSaveFeedSource": "Feedkilden kunne ikke gemmes.",
-  "couldNotRemoveFeedSource": "Feedkilden kunne ikke fjernes."
+  "couldNotRemoveFeedSource": "Feedkilden kunne ikke fjernes.",
+  "externalGameDetails": "Eksterne spiloplysninger",
+  "addedToLibraryDate": "Føjet til biblioteket",
+  "developer": "Udvikler",
+  "publisher": "Udgiver",
+  "tags": "Tags",
+  "couldNotSaveGameDetails": "Kunne ikke gemme spiloplysninger.",
+  "couldNotRemoveGameDetails": "Kunne ikke fjerne spiloplysninger."
 }

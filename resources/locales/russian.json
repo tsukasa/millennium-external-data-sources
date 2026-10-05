@@ -8,13 +8,10 @@
   "concurrentFeedFetches": "Simultaneous feed fetches",
   "concurrentFeedFetchesDescription": "Maximum number of feeds fetched at once (1–8).",
   "externalNewsSource": "Внешний источник новостей",
-  "externalReleaseDate": "External Release Date",
   "releaseDate": "Release Date",
   "year": "Year",
   "month": "Month",
   "day": "Day",
-  "couldNotSaveReleaseDate": "Could not save release date.",
-  "couldNotRemoveReleaseDate": "Could not remove release date.",
   "chooseFeed": "Выберите RSS- или Atom-ленту для этой игры.",
   "showFeedInWhatsNew": "Показывать ленту в разделе «Что нового»",
   "maxItemsInWhatsNewTitle": "Макс. элементов в «Что нового»",
@@ -30,5 +27,12 @@
   "activity": "Активность",
   "enterFeedUrl": "Введите URL-адрес ленты HTTP или HTTPS.",
   "couldNotSaveFeedSource": "Не удалось сохранить источник ленты.",
-  "couldNotRemoveFeedSource": "Не удалось удалить источник ленты."
+  "couldNotRemoveFeedSource": "Не удалось удалить источник ленты.",
+  "externalGameDetails": "Внешние сведения об игре",
+  "addedToLibraryDate": "Добавлено в библиотеку",
+  "developer": "Разработчик",
+  "publisher": "Издатель",
+  "tags": "Метки",
+  "couldNotSaveGameDetails": "Не удалось сохранить сведения об игре.",
+  "couldNotRemoveGameDetails": "Не удалось удалить сведения об игре."
 }

@@ -34,8 +34,6 @@ console.log('Finished locale generation!\r\n');
 
 /**
  * Reads a locale file and ensures it contains only non-empty string values.
- * @param file Name of the JSON file in resources/locales.
- * @returns The translation strings indexed by key.
  * @throws If the file does not contain a valid locale object.
  */
 async function readLocale(file: string): Promise<Record<string, string>> {

@@ -3,6 +3,24 @@ import { installBackend, FeedManager, id, otherId, url, tick, runtime } from './
 
 beforeEach(installBackend);
 
+test('settings without a URL survive loading and never start a feed request', async () => {
+  runtime.shown = { [id]: false };
+  runtime.maxed = { [id]: 5 };
+  const feedManager = new FeedManager();
+  const originalFetch = backend.fetchFeed;
+  let requests = 0;
+  backend.fetchFeed = async () => { requests++; throw new Error('No feed configured'); };
+  try {
+    await feedManager.load();
+    expect(feedManager.sources[id]).toEqual({ url: '', showFeedInWhatsNew: false, maxItemsFromFeedInWhatsNew: 5 });
+    await feedManager.prefetchConfigured(id);
+    expect(requests).toBe(0);
+  } finally {
+    backend.fetchFeed = originalFetch;
+    feedManager.dispose();
+  }
+});
+
 test('persistent feed settings stay separate by AppID and failed writes retain previous state', async () => {
   runtime.saved = {};
   runtime.shown = {};
@@ -11,9 +29,10 @@ test('persistent feed settings stay separate by AppID and failed writes retain p
   const feedManager = new FeedManager(); await feedManager.load();
   await feedManager.save(id, url, false); await feedManager.save(otherId, 'https://other.test/rss');
   const restart = new FeedManager(); await restart.load();
-  expect(restart.values).toEqual({ [id]: url, [otherId]: 'https://other.test/rss' });
-  expect(restart.showFeedInWhatsNew).toEqual({ [id]: false, [otherId]: true });
-  expect(restart.maxItemsFromFeedInWhatsNew).toEqual({ [id]: 3, [otherId]: 3 });
+  expect(restart.sources).toEqual({
+    [id]: { url, showFeedInWhatsNew: false, maxItemsFromFeedInWhatsNew: 3 },
+    [otherId]: { url: 'https://other.test/rss', showFeedInWhatsNew: true, maxItemsFromFeedInWhatsNew: 3 },
+  });
   await feedManager.addUrlToRemovedFeedItems('https://example.com/article');
   await feedManager.addUrlToRemovedFeedItems('https://example.com/article');
   await tick();
@@ -22,10 +41,10 @@ test('persistent feed settings stay separate by AppID and failed writes retain p
   expect(removalRestart.feedRemovedItems.has('https://example.com/article')).toBe(true);
   await feedManager.setMaxItemsFromFeedInWhatsNew(id, 5);
   const limitRestart = new FeedManager(); await limitRestart.load();
-  expect(limitRestart.maxItemsFromFeedInWhatsNew[id]).toBe(5);
+  expect(limitRestart.sources[id]?.maxItemsFromFeedInWhatsNew).toBe(5);
   await expect(feedManager.save(id, 'https://fail.test/')).rejects.toThrow('disk error');
-  expect(feedManager.values[id]).toBe(url);
-  expect(feedManager.showFeedInWhatsNew[id]).toBe(false);
+  expect(feedManager.sources[id]?.url).toBe(url);
+  expect(feedManager.sources[id]?.showFeedInWhatsNew).toBe(false);
   await feedManager.clear(id); expect(runtime.saved[id]).toBeUndefined(); expect(runtime.saved[otherId]).toBeDefined();
   expect(runtime.shown[id]).toBeUndefined();
   expect(runtime.maxed[id]).toBeUndefined();
@@ -64,7 +83,7 @@ test('background prefetch shares the feed request with an opened game', async ()
   const response = new Promise<string>(resolve => { finish = resolve; });
   backend.fetchFeed = async () => { requests++; return response; };
   const feedManager = new FeedManager();
-  feedManager.values[id] = url;
+  feedManager.sources[id] = { url, showFeedInWhatsNew: true };
   try {
     const prefetch = feedManager.prefetchConfigured(id);
     const opened = feedManager.cache.get(id, url);
@@ -89,7 +108,7 @@ test('background refresh starts once and fetches at most two feeds concurrently'
   const release = new Map<string, () => void>();
   let active = 0;
   let peak = 0;
-  for (const feedId of ids) feedManager.values[feedId] = `https://example.com/${feedId}`;
+  for (const feedId of ids) feedManager.sources[feedId] = { url: `https://example.com/${feedId}`, showFeedInWhatsNew: true };
   backend.fetchFeed = feedId => {
     requested.push(feedId);
     active++;
@@ -97,7 +116,7 @@ test('background refresh starts once and fetches at most two feeds concurrently'
     return new Promise(resolve => release.set(feedId, () => {
       release.delete(feedId);
       active--;
-      resolve(JSON.stringify({ url: feedManager.values[feedId], xml: '<rss><channel/></rss>' }));
+      resolve(JSON.stringify({ url: feedManager.sources[feedId]?.url, xml: '<rss><channel/></rss>' }));
     }));
   };
   try {
@@ -116,55 +135,158 @@ test('background refresh starts once and fetches at most two feeds concurrently'
 });
 
 
-test('background refresh fetches a configured feed again after ten minutes', async () => {
+test('background refresh follows cache expiry after a nonzero fetch duration', async () => {
   const originalFetch = backend.fetchFeed;
-  const originalSetInterval = globalThis.setInterval;
+  const originalSetTimeout = globalThis.setTimeout;
   const originalNow = Date.now;
   let now = 0;
-  let intervalMs = 0;
-  let runInterval!: () => void;
+  let delayMs = 0;
+  let runTimer!: () => void;
   let requests = 0;
   Date.now = () => now;
-  globalThis.setInterval = ((callback: () => void, delay: number) => {
-    runInterval = callback;
-    intervalMs = delay;
-    return 1 as unknown as ReturnType<typeof setInterval>;
-  }) as typeof setInterval;
+  globalThis.setTimeout = ((callback: () => void, delay: number) => {
+    runTimer = callback;
+    delayMs = delay;
+    return 1 as unknown as ReturnType<typeof setTimeout>;
+  }) as typeof setTimeout;
   backend.fetchFeed = async () => {
     requests++;
+    now += 1_000;
     return JSON.stringify({ url, xml: `<rss><channel><item><title>Update ${requests}</title><link>https://example.com/update</link></item></channel></rss>` });
   };
   const feedManager = new FeedManager();
-  feedManager.values[id] = url;
+  feedManager.sources[id] = { url, showFeedInWhatsNew: true };
   try {
     feedManager.startBackgroundRefresh();
-    await tick();
-    expect(intervalMs).toBe(600_000);
+    await feedManager.prefetchConfigured();
+    expect(delayMs).toBe(600_000);
+    expect(now).toBe(1_000);
     expect(requests).toBe(1);
     expect(feedManager.cache.peek(url)?.[0].title).toBe('Update 1');
 
-    now = 599_999;
-    runInterval();
-    await tick();
+    now = 600_000;
+    await feedManager.prefetchConfigured();
     expect(requests).toBe(1);
 
-    now = 600_000;
-    runInterval();
-    await tick();
+    now = 601_000;
+    runTimer();
+    await feedManager.prefetchConfigured();
     expect(requests).toBe(2);
     expect(feedManager.cache.peek(url)?.[0].title).toBe('Update 2');
   } finally {
     feedManager.dispose();
     backend.fetchFeed = originalFetch;
-    globalThis.setInterval = originalSetInterval;
+    globalThis.setTimeout = originalSetTimeout;
     Date.now = originalNow;
+  }
+});
+
+test('queued feeds refresh at the earliest expiry and failed refreshes retain their last result', async () => {
+  const originalFetch = backend.fetchFeed;
+  const originalSetTimeout = globalThis.setTimeout;
+  const originalClearTimeout = globalThis.clearTimeout;
+  const originalNow = Date.now;
+  let now = 0;
+  let delay = 0;
+  let runTimer!: () => void;
+  let fail = false;
+  const requests: string[] = [];
+  Date.now = () => now;
+  globalThis.setTimeout = ((callback: () => void, milliseconds: number) => {
+    runTimer = callback;
+    delay = milliseconds;
+    return 1 as unknown as ReturnType<typeof setTimeout>;
+  }) as typeof setTimeout;
+  globalThis.clearTimeout = (() => {}) as typeof clearTimeout;
+  const feedManager = new FeedManager();
+  feedManager.concurrentFetches = 1;
+  feedManager.sources = {
+    [id]: { url, showFeedInWhatsNew: true },
+    [otherId]: { url: `${url}/other`, showFeedInWhatsNew: true },
+  };
+  backend.fetchFeed = async appId => {
+    requests.push(appId);
+    now += 1_000;
+    if (fail)
+      throw new Error('offline');
+    return JSON.stringify({ url: feedManager.sources[appId]?.url, xml: '<rss><channel/></rss>' });
+  };
+  try {
+    feedManager.startBackgroundRefresh(id);
+    await feedManager.prefetchConfigured();
+    expect(requests).toEqual([id, otherId]);
+    expect(now).toBe(2_000);
+    expect(delay).toBe(599_000);
+
+    const lastItems = feedManager.cache.peekLast(url);
+    fail = true;
+    now += delay;
+    runTimer();
+    await feedManager.prefetchConfigured();
+    expect(requests).toEqual([id, otherId, id]);
+    expect(feedManager.cache.peekLast(url)).toBe(lastItems);
+    expect(delay).toBe(1);
+
+    now += delay;
+    runTimer();
+    await feedManager.prefetchConfigured();
+    expect(requests).toEqual([id, otherId, id, otherId]);
+    expect(delay).toBe(598_999);
+
+    fail = false;
+    now += delay;
+    runTimer();
+    await feedManager.prefetchConfigured();
+    expect(requests).toHaveLength(5);
+    expect(feedManager.cache.peek(url)).toBeDefined();
+    now += delay;
+    runTimer();
+    await feedManager.prefetchConfigured();
+    expect(requests).toHaveLength(6);
+    expect(feedManager.cache.peek(`${url}/other`)).toBeDefined();
+  } finally {
+    feedManager.dispose();
+    backend.fetchFeed = originalFetch;
+    globalThis.setTimeout = originalSetTimeout;
+    globalThis.clearTimeout = originalClearTimeout;
+    Date.now = originalNow;
+  }
+});
+
+test('disposing during the first background request does not create a refresh timer', async () => {
+  const originalFetch = backend.fetchFeed;
+  const originalSetTimeout = globalThis.setTimeout;
+  const originalClearTimeout = globalThis.clearTimeout;
+  let timers = 0;
+  let finish!: (response: string) => void;
+  backend.fetchFeed = () => new Promise(resolve => { finish = resolve; });
+  globalThis.setTimeout = ((_callback: () => void, _milliseconds: number) => {
+    timers++;
+    return 1 as unknown as ReturnType<typeof setTimeout>;
+  }) as typeof setTimeout;
+  globalThis.clearTimeout = (() => {}) as typeof clearTimeout;
+  const feedManager = new FeedManager();
+  feedManager.sources[id] = { url, showFeedInWhatsNew: true };
+  try {
+    feedManager.startBackgroundRefresh();
+    const pending = feedManager.prefetchConfigured();
+    feedManager.dispose();
+    finish(JSON.stringify({ url, xml: '<rss><channel/></rss>' }));
+    await pending;
+    expect(timers).toBe(0);
+    expect(feedManager.cache.peekLast(url)).toBeUndefined();
+  } finally {
+    feedManager.dispose();
+    backend.fetchFeed = originalFetch;
+    globalThis.setTimeout = originalSetTimeout;
+    globalThis.clearTimeout = originalClearTimeout;
   }
 });
 
 
 test('global feed settings persist and update the active refresh timer and cache', async () => {
-  const originalSetInterval = globalThis.setInterval;
-  const originalClearInterval = globalThis.clearInterval;
+  const originalSetTimeout = globalThis.setTimeout;
+  const originalClearTimeout = globalThis.clearTimeout;
   const originalNow = Date.now;
   const originalFetch = backend.fetchFeed;
   const originalSettings = runtime.globalFeedSettings;
@@ -172,10 +294,10 @@ test('global feed settings persist and update the active refresh timer and cache
   const delays: number[] = [];
   const cleared: unknown[] = [];
   Date.now = () => now;
-  globalThis.setInterval = ((_: () => void, delay: number) => {
-    delays.push(delay); return delays.length as unknown as ReturnType<typeof setInterval>;
-  }) as typeof setInterval;
-  globalThis.clearInterval = ((timer: unknown) => { cleared.push(timer); }) as typeof clearInterval;
+  globalThis.setTimeout = ((_: () => void, delay: number) => {
+    delays.push(delay); return delays.length as unknown as ReturnType<typeof setTimeout>;
+  }) as typeof setTimeout;
+  globalThis.clearTimeout = ((timer: unknown) => { cleared.push(timer); }) as typeof clearTimeout;
   let requests = 0;
   backend.fetchFeed = async () => {
     requests++;
@@ -184,9 +306,9 @@ test('global feed settings persist and update the active refresh timer and cache
   const feedManager = new FeedManager();
   try {
     await feedManager.load();
-    feedManager.values = { [id]: url };
+    feedManager.sources = { [id]: { url, showFeedInWhatsNew: true } };
     feedManager.startBackgroundRefresh();
-    await tick();
+    await feedManager.prefetchConfigured();
     expect(delays).toEqual([600_000]);
     expect(requests).toBe(1);
 
@@ -208,8 +330,8 @@ test('global feed settings persist and update the active refresh timer and cache
   } finally {
     feedManager.dispose();
     backend.fetchFeed = originalFetch;
-    globalThis.setInterval = originalSetInterval;
-    globalThis.clearInterval = originalClearInterval;
+    globalThis.setTimeout = originalSetTimeout;
+    globalThis.clearTimeout = originalClearTimeout;
     Date.now = originalNow;
     runtime.globalFeedSettings = originalSettings;
   }
@@ -223,14 +345,14 @@ test('configured worker count limits simultaneous background fetches', async () 
   const release: (() => void)[] = [];
   let active = 0;
   let peak = 0;
-  for (const feedId of ids) feedManager.values[feedId] = `https://example.com/${feedId}`;
+  for (const feedId of ids) feedManager.sources[feedId] = { url: `https://example.com/${feedId}`, showFeedInWhatsNew: true };
   feedManager.concurrentFetches = 3;
   backend.fetchFeed = feedId => {
     active++;
     peak = Math.max(peak, active);
     return new Promise(resolve => release.push(() => {
       active--;
-      resolve(JSON.stringify({ url: feedManager.values[feedId], xml: '<rss><channel/></rss>' }));
+      resolve(JSON.stringify({ url: feedManager.sources[feedId]?.url, xml: '<rss><channel/></rss>' }));
     }));
   };
   try {
@@ -255,13 +377,13 @@ test('overlapping background refreshes reuse one worker group', async () => {
   const release: (() => void)[] = [];
   let active = 0;
   let peak = 0;
-  for (const feedId of ids) feedManager.values[feedId] = `https://example.com/${feedId}`;
+  for (const feedId of ids) feedManager.sources[feedId] = { url: `https://example.com/${feedId}`, showFeedInWhatsNew: true };
   backend.fetchFeed = feedId => {
     active++;
     peak = Math.max(peak, active);
     return new Promise(resolve => release.push(() => {
       active--;
-      resolve(JSON.stringify({ url: feedManager.values[feedId], xml: '<rss><channel/></rss>' }));
+      resolve(JSON.stringify({ url: feedManager.sources[feedId]?.url, xml: '<rss><channel/></rss>' }));
     }));
   };
   try {

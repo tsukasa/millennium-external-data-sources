@@ -8,13 +8,10 @@
   "concurrentFeedFetches": "Simultaneous feed fetches",
   "concurrentFeedFetchesDescription": "Maximum number of feeds fetched at once (1–8).",
   "externalNewsSource": "Εξωτερική πηγή ειδήσεων",
-  "externalReleaseDate": "External Release Date",
   "releaseDate": "Release Date",
   "year": "Year",
   "month": "Month",
   "day": "Day",
-  "couldNotSaveReleaseDate": "Could not save release date.",
-  "couldNotRemoveReleaseDate": "Could not remove release date.",
   "chooseFeed": "Επιλέξτε μια ροή RSS ή Atom για αυτό το παιχνίδι.",
   "showFeedInWhatsNew": "Εμφάνιση ροής στην ενότητα «Τι νέο υπάρχει»",
   "maxItemsInWhatsNewTitle": "Μέγιστα στοιχεία στην ενότητα «Τι νέο υπάρχει»",
@@ -30,5 +27,12 @@
   "activity": "Δραστηριότητα",
   "enterFeedUrl": "Εισαγάγετε μια διεύθυνση URL ροής HTTP ή HTTPS.",
   "couldNotSaveFeedSource": "Δεν ήταν δυνατή η αποθήκευση της πηγής ροής.",
-  "couldNotRemoveFeedSource": "Δεν ήταν δυνατή η κατάργηση της πηγής ροής."
+  "couldNotRemoveFeedSource": "Δεν ήταν δυνατή η κατάργηση της πηγής ροής.",
+  "externalGameDetails": "Εξωτερικές λεπτομέρειες παιχνιδιού",
+  "addedToLibraryDate": "Προστέθηκε στη βιβλιοθήκη",
+  "developer": "Δημιουργός",
+  "publisher": "Εκδότης",
+  "tags": "Ετικέτες",
+  "couldNotSaveGameDetails": "Δεν ήταν δυνατή η αποθήκευση των λεπτομερειών του παιχνιδιού.",
+  "couldNotRemoveGameDetails": "Δεν ήταν δυνατή η αφαίρεση των λεπτομερειών του παιχνιδιού."
 }

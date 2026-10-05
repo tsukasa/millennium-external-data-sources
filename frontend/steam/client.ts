@@ -1,16 +1,23 @@
 import type { ActivityStore } from './activity-store';
 import type { WhatsNewStore, NavigationStore } from './whats-new';
+import { httpUrl } from '../feed/parser';
 
 export interface AppOverview {
   appid: number;
   rt_original_release_date: number;
+  rt_purchased_time?: number;
   __cachedReleaseYearString?: string;
+  m_setStoreTags?: Set<number>;
+  m_setStoreCategories?: Set<number>;
+  BHasStoreTag?(tagId: number): boolean;
 }
 
 export interface SteamAppStore {
-  allApps?: AppOverview[];
   m_mapApps: Map<number, AppOverview>;
   GetAppOverviewByAppID(appId: number): AppOverview | null;
+  GetLocalizationForStoreTag?(tagId: number): string | undefined;
+  GetTopStoreTags?(query: string): { nTagId: number; nCount: number }[];
+  m_mapStoreTagLocalization?: Record<number, string>;
 }
 
 export interface ClientSettings {
@@ -31,8 +38,6 @@ export interface Popup {
 }
 
 export interface LocalizationManager {
-  m_mapTokens?: Map<string, string>;
-  m_mapFallbackTokens?: Map<string, string>;
   GetPreferredLocales?(): string[];
 }
 
@@ -42,7 +47,6 @@ export interface BrowserLocation {
 
 export interface MainWindowBrowserManager {
   m_lastLocation?: BrowserLocation;
-  ShowURL?(url: string): void;
 }
 
 export interface HeroImages {
@@ -51,18 +55,44 @@ export interface HeroImages {
 
 export interface AppDetailsStore {
   GetHeroImages?(app: unknown): HeroImages;
+  GetAppData?(appId: number): AppData;
+  m_mapAppData?: Map<number, AppData>;
+}
+
+export interface AssociationData {
+  rgDevelopers: { strName: string; strURL: string }[];
+  rgPublishers: { strName: string; strURL: string }[];
+  rgFranchises?: { strName: string; strURL: string }[];
+}
+
+export interface AppData {
+  associationData: AssociationData | null;
+}
+
+export interface LibraryFilter {
+  searchText: string;
+  GetTagsString(): string;
+  GetAllSelectedOptions(): { option: number }[];
+}
+
+export interface SteamCollection {
+  internalAppFilter?: LibraryFilter;
+  Save(): Promise<unknown>;
 }
 
 export interface PopupManager {
   GetExistingPopup(name: string): Popup | undefined;
   AddPopupCreatedCallback(callback: (popup: Popup) => void): SteamSubscription;
-  AddPopupDestroyedCallback?(callback: (popup: Popup) => void): SteamSubscription;
 }
 
 export interface SteamGlobals {
   LocalizationManager?: LocalizationManager;
   MainWindowBrowserManager?: MainWindowBrowserManager;
   appStore?: SteamAppStore;
+  collectionStore?: {
+    OnAppOverviewChange(apps: AppOverview[], removedAppIds: number[]): void;
+    NewUnsavedCollection?(name: string, filter: LibraryFilter | undefined, apps: AppOverview[]): SteamCollection;
+  };
   appActivityStore?: ActivityStore;
   libraryEventStore?: WhatsNewStore;
   settingsStore?: SettingsStore;
@@ -75,10 +105,7 @@ export interface SteamGlobals {
 // stores. Narrow that external boundary once; consumers use the contracts above.
 export const steam = () => window as unknown as Window & SteamGlobals;
 
-/**
- * Preferred Steam locales, with the browser language as fallback.
- * @returns An array of preferred locale strings, with the browser language as fallback.
- */
+/** Preferred Steam locales, with the browser language as fallback. */
 export function dateLocales(): string[] {
   try {
     const preferred = steam().LocalizationManager?.GetPreferredLocales?.();
@@ -95,35 +122,22 @@ export function isNonSteamId(id: number): boolean {
   return Number.isInteger(id) && id >= 0x80000000 && id <= 0xffffffff;
 }
 
-/**
- * Configured shortcut candidate on the current library detail route.
- * @returns The active AppID as a string if it is a non-Steam ID, otherwise undefined.
- */
+/** Configured shortcut candidate on the current library detail route. */
 export function activeAppId(): string | undefined {
   const path = steam().MainWindowBrowserManager?.m_lastLocation?.pathname || '';
   const match = path.match(/^\/library\/app\/(\d+)(?:\/|$)/);
   return match && isNonSteamId(Number(match[1])) ? String(Number(match[1])) : undefined;
 }
 
-/**
- * Open HTTP(S) articles through Steam without navigating its current page.
- * @param doc The document context in which to create the link. Usually the card's document.
- * @param url The URL of the article to open.
- */
+/** Open HTTP(S) articles through Steam without navigating its current page. */
 export function openArticle(doc: Document, url: string) {
-  let article: URL;
+  const article = httpUrl(url, doc.baseURI);
 
-  try {
-    article = new URL(url, doc.baseURI);
-  } catch {
-    return;
-  }
-
-  if (article.protocol !== 'http:' && article.protocol !== 'https:')
+  if (!article)
     return;
 
   const link = doc.createElement('a');
-  link.href = article.href;
+  link.href = article;
   link.target = '_blank';
   link.rel = 'noopener noreferrer';
   link.style.display = 'none';

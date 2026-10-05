@@ -8,13 +8,10 @@
   "concurrentFeedFetches": "Simultaneous Feed Fetches",
   "concurrentFeedFetchesDescription": "Max number of feeds fetched at once (1-8).",
   "externalNewsSource": "External News Source",
-  "externalReleaseDate": "External Release Date",
   "releaseDate": "Release Date",
   "year": "Year",
   "month": "Month",
   "day": "Day",
-  "couldNotSaveReleaseDate": "Could not save release date.",
-  "couldNotRemoveReleaseDate": "Could not remove release date.",
   "chooseFeed": "Choose an RSS or Atom feed for this game.",
   "showFeedInWhatsNew": "Show Feed in What's New",
   "maxItemsInWhatsNewTitle": "Max Items in What's New",
@@ -30,5 +27,12 @@
   "activity": "Activity",
   "enterFeedUrl": "Enter an HTTP or HTTPS feed URL.",
   "couldNotSaveFeedSource": "Could not save feed source.",
-  "couldNotRemoveFeedSource": "Could not remove feed source."
+  "couldNotRemoveFeedSource": "Could not remove feed source.",
+  "externalGameDetails": "External Game Details",
+  "addedToLibraryDate": "Added to Library",
+  "developer": "Developer",
+  "publisher": "Publisher",
+  "tags": "Tags",
+  "couldNotSaveGameDetails": "Could not save game details.",
+  "couldNotRemoveGameDetails": "Could not remove game details."
 }

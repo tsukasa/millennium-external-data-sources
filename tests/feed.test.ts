@@ -2,6 +2,7 @@ import { beforeAll, expect, test } from 'bun:test';
 import { JSDOM } from 'jsdom';
 import { FeedCache, httpUrl, parseFeed } from '../frontend/feed';
 import { decodeResponse } from '../frontend/transport';
+import { openArticle } from '../frontend/steam/client';
 
 beforeAll(() => {
   Object.assign(globalThis, { DOMParser: new JSDOM().window.DOMParser });
@@ -10,6 +11,20 @@ beforeAll(() => {
 const source = 'https://example.com/news/feed.xml';
 const rss = (items: string) => `<rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Studio &amp; News</title>${items}</channel></rss>`;
 const item = (title: string, date = '', extra = '') => `<item><title>${title}</title><link>/${title}</link><pubDate>${date}</pubDate>${extra}</item>`;
+
+test('article links resolve against their document and reject invalid or non-HTTP URLs', () => {
+  const doc = new JSDOM('<body></body>', { url: source }).window.document;
+  const opened: HTMLAnchorElement[] = [];
+  doc.addEventListener('click', event => {
+    event.preventDefault();
+    opened.push(event.target as HTMLAnchorElement);
+  });
+  for (const url of ['../article', 'http://studio.test/news', 'javascript:alert(1)', 'data:text/html,test', 'http://['])
+    openArticle(doc, url);
+  expect(opened.map(link => link.href)).toEqual(['https://example.com/article', 'http://studio.test/news']);
+  expect(opened.every(link => link.target === '_blank' && link.rel === 'noopener noreferrer')).toBe(true);
+  expect(doc.querySelector('a')).toBeNull();
+});
 
 test('live Millennium FFI already decodes JSON responses', async () => {
   expect(decodeResponse<Record<string, string>>({ '3900360037': source })).toEqual({ '3900360037': source });
@@ -81,6 +96,14 @@ test('empty and unsupported feeds', () => {
   expect(parseFeed(rss(''), source)).toEqual([]);
   expect(() => parseFeed('<html>Not a feed</html>', source)).toThrow();
   expect(() => parseFeed('<rss><channel><item></channel></rss>', source)).toThrow('Invalid feed XML');
+});
+
+test('image selection precedes removal of non-visible HTML content', () => {
+  const xml = rss(item('cover', '', '<description><![CDATA[<object><img src="cover.png"></object><p>Visible text</p>]]></description>'));
+  expect(parseFeed(xml, source)[0]).toMatchObject({
+    contents: 'Visible text',
+    image: 'https://example.com/news/cover.png',
+  });
 });
 
 test('cache shares requests, expires, retries errors and ignores invalidated completions', async () => {

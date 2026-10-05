@@ -8,13 +8,10 @@
   "concurrentFeedFetches": "Simultaneous feed fetches",
   "concurrentFeedFetchesDescription": "Maximum number of feeds fetched at once (1–8).",
   "externalNewsSource": "Zewnętrzne źródło wiadomości",
-  "externalReleaseDate": "External Release Date",
   "releaseDate": "Release Date",
   "year": "Year",
   "month": "Month",
   "day": "Day",
-  "couldNotSaveReleaseDate": "Could not save release date.",
-  "couldNotRemoveReleaseDate": "Could not remove release date.",
   "chooseFeed": "Wybierz kanał RSS lub Atom dla tej gry.",
   "showFeedInWhatsNew": "Pokaż kanał w sekcji „Co nowego”",
   "maxItemsInWhatsNewTitle": "Maks. elementów w sekcji „Co nowego”",
@@ -30,5 +27,12 @@
   "activity": "Aktywność",
   "enterFeedUrl": "Podaj adres URL kanału HTTP lub HTTPS.",
   "couldNotSaveFeedSource": "Nie udało się zapisać źródła kanału.",
-  "couldNotRemoveFeedSource": "Nie udało się usunąć źródła kanału."
+  "couldNotRemoveFeedSource": "Nie udało się usunąć źródła kanału.",
+  "externalGameDetails": "Zewnętrzne informacje o grze",
+  "addedToLibraryDate": "Dodano do biblioteki",
+  "developer": "Producent",
+  "publisher": "Wydawca",
+  "tags": "Tagi",
+  "couldNotSaveGameDetails": "Nie udało się zapisać informacji o grze.",
+  "couldNotRemoveGameDetails": "Nie udało się usunąć informacji o grze."
 }

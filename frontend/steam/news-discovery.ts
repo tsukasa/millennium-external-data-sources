@@ -2,6 +2,7 @@ import { applyHookStubs, findModuleExport, removeHookStubs } from 'millennium';
 import type { ActivityComponent, NativeActivityProps, NativeEventModelConstructor, NativeActivityEventConstructor, QueryDataClient } from './news-types';
 import type { ComponentClass } from 'react';
 import { steam } from './client';
+import { MethodHooks } from './method-hooks';
 
 export interface NativeActivityComponentClass extends ComponentClass<NativeActivityProps> {
   prototype: ActivityComponent;
@@ -21,12 +22,7 @@ export interface NativeBindings {
   language: number;
 }
 
-/**
- * Recursively search a React element tree for a node that matches the given predicate.
- * @param tree The root of the React element tree to search.
- * @param predicate A function that returns true for the desired node.
- * @returns The first node that matches the predicate, or undefined if none is found.
- */
+/** Recursively search a React element tree for a node that matches the given predicate. */
 export function findElement(tree: any, predicate: (node: any) => boolean): any {
   if (Array.isArray(tree)) {
     for (const child of tree) {
@@ -48,9 +44,6 @@ export function findElement(tree: any, predicate: (node: any) => boolean): any {
 /**
  * Require a React element that matches the given predicate.
  * Throws an error if no matching element is found.
- * @param tree The root of the React element tree to search.
- * @param predicate A function that returns true for the desired node.
- * @returns The first node that matches the predicate.
  */
 function requireElement(tree: any, predicate: (node: any) => boolean) {
   const element = findElement(tree, predicate);
@@ -61,11 +54,7 @@ function requireElement(tree: any, predicate: (node: any) => boolean) {
   return element;
 }
 
-/**
- * Render a React element to its output.
- * @param element The React element to render.
- * @returns The rendered output of the element.
- */
+/** Render a React element to its output. */
 function render(element: any): any {
   const type = element.type.type || element.type;
 
@@ -74,10 +63,7 @@ function render(element: any): any {
     : type(element.props);
 }
 
-/**
- * Find Steam modules by behavior instead of build-specific names or IDs.
- * @returns An object containing the discovered native modules.
- */
+/** Find Steam modules by behavior instead of build-specific names or IDs. */
 function findNativeModules() {
   /* Activity module */
   const Activity = findModuleExport(value => typeof value === 'function' && String(value).includes('AppDetailsActivitySectionDays'));
@@ -112,12 +98,7 @@ function findNativeModules() {
   return { Activity, EventModel, ActivityEvent, sharedClient, store };
 }
 
-/**
- * Gives Steam's activity tree an already-loaded, synthetic event to render.
- * @param EventModel The constructor for the native event model.
- * @param ActivityEvent The constructor for the native activity event.
- * @returns An object containing the probe's GID, model, event, day, and activity.
- */
+/** Gives Steam's activity tree an already-loaded, synthetic event to render. */
 function createProbe(EventModel: NativeEventModelConstructor, ActivityEvent: NativeActivityEventConstructor) {
   const probeGid = 'external-news-discovery';
   const model = new EventModel();
@@ -148,18 +129,7 @@ function createProbe(EventModel: NativeEventModelConstructor, ActivityEvent: Nat
   };
 }
 
-/**
- * Temporarily supply the stores and hooks needed for an unmounted probe render.
- * @param store The app activity store to use during the probe render.
- * @param client The shared client to use during the probe render.
- * @param activity The synthetic activity to render.
- * @param inspect A function that returns the native bindings to inspect.
- * @returns The result of the inspection function.
- */
-function withProbeEnvironment(store: any, client: any, activity: any, inspect: () => NativeBindings): NativeBindings {
-  const originalDescriptor = Object.getOwnPropertyDescriptor(store, 'GetAppActivity');
-  const original = store.GetAppActivity;
-
+function installProbeHookStubs(client: any): () => void {
   // Router hooks and QueryClient hooks have undefined defaults outside a render.
   const context = new Proxy(client, {
     get(target, key) {
@@ -186,14 +156,16 @@ function withProbeEnvironment(store: any, client: any, activity: any, inspect: (
   const observers: any[] = [];
   let dispatcher: any;
   let extraHooks: any;
+  const restore = () => {
+    if (dispatcher) {
+      Object.assign(dispatcher, extraHooks);
+      removeHookStubs();
+    }
+    refs.forEach(ref => ref.current?.reaction?.dispose());
+    observers.forEach(observer => observer.destroy());
+  };
 
   try {
-    store.GetAppActivity = function (appid: number) {
-      return appid === 0
-        ? activity
-        : original.call(this, appid);
-    };
-
     dispatcher = applyHookStubs();
 
     // Millennium restores only its built-in hook list; restore extra hooks ourselves.
@@ -230,35 +202,30 @@ function withProbeEnvironment(store: any, client: any, activity: any, inspect: (
 
       useId: () => ':external-news-discovery:',
     });
+    return restore;
+  } catch (error) {
+    restore();
+    throw error;
+  }
+}
 
+/** Temporarily supply the stores and hooks needed for an unmounted probe render. */
+function withProbeEnvironment(store: any, client: any, activity: any, inspect: () => NativeBindings): NativeBindings {
+  const hooks = new MethodHooks();
+
+  let restoreStubs: (() => void) | undefined;
+  try {
+    hooks.wrap(store, 'GetAppActivity', (original, _instance, [appId]) => appId === 0 ? activity : original());
+    restoreStubs = installProbeHookStubs(client);
     return inspect();
   } finally {
-    if (originalDescriptor) {
-      Object.defineProperty(store, 'GetAppActivity', originalDescriptor);
-    } else {
-      delete store.GetAppActivity;
-    }
-
-    if (dispatcher) {
-      Object.assign(dispatcher, extraHooks);
-      removeHookStubs();
-    }
-
-    refs.forEach(ref => ref.current?.reaction?.dispose());
-
-    observers.forEach(observer => observer.destroy());
-
+    hooks.restore();
+    restoreStubs?.();
     client.clear();
   }
 }
 
-/**
- * Walk the activity panel down to the event card without mounting it.
- * @param Activity The constructor for the native activity component.
- * @param day The day to locate within the activity feed.
- * @param event The event to locate within the specified day.
- * @returns An object containing the section, post text entry, announcement, and loader elements.
- */
+/** Walk the activity panel down to the event card without mounting it. */
 function inspectActivityTree(Activity: any, day: any, event: any) {
   const section = Activity({ appid: 0, showTextBox: true });
 
@@ -294,8 +261,6 @@ function inspectActivityTree(Activity: any, day: any, event: any) {
 /**
  * Inspect the image query for a given loader without mounting it.
  * Render the card only to discover its image query; never mount its loader.
- * @param loader The loader element to inspect.
- * @param model The model to use for rendering the loader.
  */
 function inspectImageQuery(loader: any, model: any) {
   const loaderInstance = new loader.type(loader.props);
@@ -303,12 +268,7 @@ function inspectImageQuery(loader: any, model: any) {
   render(loaderInstance.render());
 }
 
-/**
- * Find the image query key for a given probe GID.
- * @param client The client to query.
- * @param probeGid The probe GID to search for.
- * @returns An object containing the image query key and language.
- */
+/** Find the image query key for a given probe GID. */
 function findImageQueryKey(client: any, probeGid: string) {
   const imageQueryKey = client
     .getQueryCache()
@@ -329,7 +289,6 @@ function findImageQueryKey(client: any, probeGid: string) {
 /**
  * Discover native Steam news content without mounting components.
  * Synchronous, unmounted discovery. No effects or network fetches; temporary store hooks are restored.
- * @returns An object containing the discovered native news bindings.
  */
 export function discoverNativeNews(): NativeBindings {
   const { Activity, EventModel, ActivityEvent, sharedClient, store } = findNativeModules();

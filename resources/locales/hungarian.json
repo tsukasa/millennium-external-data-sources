@@ -8,13 +8,10 @@
   "concurrentFeedFetches": "Simultaneous feed fetches",
   "concurrentFeedFetchesDescription": "Maximum number of feeds fetched at once (1–8).",
   "externalNewsSource": "Külső hírforrás",
-  "externalReleaseDate": "External Release Date",
   "releaseDate": "Release Date",
   "year": "Year",
   "month": "Month",
   "day": "Day",
-  "couldNotSaveReleaseDate": "Could not save release date.",
-  "couldNotRemoveReleaseDate": "Could not remove release date.",
   "chooseFeed": "Válasszon RSS- vagy Atom-hírcsatornát ehhez a játékhoz.",
   "showFeedInWhatsNew": "Hírcsatorna megjelenítése az Újdonságok között",
   "maxItemsInWhatsNewTitle": "Max. elemek az Újdonságok között",
@@ -30,5 +27,12 @@
   "activity": "Tevékenység",
   "enterFeedUrl": "Adjon meg egy HTTP- vagy HTTPS-című hírcsatornát.",
   "couldNotSaveFeedSource": "A hírcsatorna forrását nem sikerült menteni.",
-  "couldNotRemoveFeedSource": "A hírcsatorna forrását nem sikerült eltávolítani."
+  "couldNotRemoveFeedSource": "A hírcsatorna forrását nem sikerült eltávolítani.",
+  "externalGameDetails": "Külső játékadatok",
+  "addedToLibraryDate": "Könyvtárhoz adva",
+  "developer": "Fejlesztő",
+  "publisher": "Kiadó",
+  "tags": "Címkék",
+  "couldNotSaveGameDetails": "Nem sikerült menteni a játékadatokat.",
+  "couldNotRemoveGameDetails": "Nem sikerült eltávolítani a játékadatokat."
 }
