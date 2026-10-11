@@ -16,10 +16,17 @@ interface RatingState {
   ariaHidden: string | null;
 }
 
+/** `Node.ELEMENT_NODE`; the global `Node` is not available in every realm. */
+const ELEMENT_NODE = 1;
+
+/** Whether a fiber's state node is a DOM element rather than a component instance. */
+const isElement = (node: unknown): node is HTMLElement =>
+  !!node && typeof node === 'object' && 'nodeType' in node && node.nodeType === ELEMENT_NODE;
+
 /** Get the DOM element corresponding to a React ActivityComponent instance. */
 function elementFor(instance: ActivityComponent): HTMLElement | undefined {
   let fiber = instance._reactInternals?.child;
-  while (fiber && !(fiber.stateNode && typeof fiber.stateNode === 'object' && 'nodeType' in fiber.stateNode && fiber.stateNode.nodeType === 1))
+  while (fiber && !isElement(fiber.stateNode))
     fiber = fiber.child;
   return fiber?.stateNode as HTMLElement | undefined;
 }
@@ -81,27 +88,24 @@ export function registerActivityComponents(feedManager: FeedManager, native: Nat
 
   const cleanup = () => {
     hooks.restore();
-    for (const section of markedSections) {
+    for (const section of markedSections)
       section.removeAttribute('data-external-news-activity');
-    }
 
     markedSections.clear();
 
     for (const [rating, previous] of markedRatings) {
       rating.inert = previous.inert;
 
-      if (previous.ariaHidden === null) {
+      if (previous.ariaHidden === null)
         rating.removeAttribute('aria-hidden');
-      } else {
+      else
         rating.setAttribute('aria-hidden', previous.ariaHidden);
-      }
     }
 
     markedRatings.clear();
 
-    for (const style of styledDocuments.values()) {
+    for (const style of styledDocuments.values())
       style.remove();
-    }
 
     styledDocuments.clear();
   };

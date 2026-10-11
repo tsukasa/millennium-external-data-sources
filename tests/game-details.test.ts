@@ -1,9 +1,32 @@
 import { beforeEach, expect, test } from 'bun:test';
 import { act, Component, createElement as h, createRef } from 'react';
 import { createRoot } from './helpers/ui-runtime';
-import { installBackend, GameDetailsManager, daysInMonth, isCalendarDate, registerGameDetails, ExternalGameDetails, id, tick, runtime, typeText, selectOption } from './helpers/ui-runtime';
+import { localTagId } from '../frontend/steam/store-tags';
+import {
+  installBackend, GameDetailsManager, daysInMonth, isCalendarDate, registerGameDetails, ExternalGameDetails, id, tick,
+  runtime, typeText, selectOption
+} from './helpers/ui-runtime';
 
 beforeEach(installBackend);
+
+const CUSTOM_TAG = localTagId('Custom');
+const BINDINGS = ['eager', 'lazy'];
+
+/** Saved details of the configured shortcut, as a fresh object for each test. */
+const savedShortcutDetails = () => ({
+  releaseDate: '2024-02-29', addedToLibraryDate: '2023-01-15', developer: ['Studio'], publisher: ['Publisher'],
+});
+
+/** Clicks the button with the given accessible label and lets React settle. */
+const clickLabeled = (label: string) => act(async () => {
+  document.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)!.click();
+  await tick();
+});
+
+/** Dispatches a keydown event for the given key. */
+const pressKey = (target: EventTarget, key: string) => act(async () => {
+  target.dispatchEvent(new window.KeyboardEvent('keydown', { key, bubbles: true }));
+});
 
 test('name normalization tolerates legacy stored strings but rejects invalid writes before persistence', async () => {
   const originalGet = backend.getGameDetails;
@@ -33,7 +56,7 @@ test('name normalization tolerates legacy stored strings but rejects invalid wri
 
 test('release date dropdowns save valid changes and clear on an empty selection', async () => {
   document.body.replaceChildren();
-  runtime.savedDetails = { [id]: { releaseDate: '2024-02-29', addedToLibraryDate: '2023-01-15', developer: ['Studio'], publisher: ['Publisher'] } };
+  runtime.savedDetails = { [id]: savedShortcutDetails() };
   const manager = new GameDetailsManager();
   const root = createRoot(document.body);
   try {
@@ -41,7 +64,8 @@ test('release date dropdowns save valid changes and clear on an empty selection'
     const dropdowns = () => [...document.querySelectorAll<HTMLSelectElement>('select[data-native-dropdown]')];
     expect(dropdowns()).toHaveLength(6);
     expect(document.querySelector('.Field.Background.Panel > div')?.textContent).toBe('Release Date');
-    expect(dropdowns().slice(0, 3).map(dropdown => dropdown.getAttribute('aria-label'))).toEqual(['Release Date: Year', 'Release Date: Month', 'Release Date: Day']);
+    expect(dropdowns().slice(0, 3).map(dropdown => dropdown.getAttribute('aria-label')))
+      .toEqual(['Release Date: Year', 'Release Date: Month', 'Release Date: Day']);
     expect(document.body.textContent).toContain('External Game Details');
     expect(document.body.textContent).toContain('Added to Library');
     expect(dropdowns().slice(3).map(dropdown => dropdown.value)).toEqual(['2023', '1', '15']);
@@ -55,16 +79,18 @@ test('release date dropdowns save valid changes and clear on an empty selection'
     expect(dropdowns()[2].options[1].textContent).toBe('01');
     expect(dropdowns()[2].options[9].textContent).toBe('09');
     expect(dropdowns()[2].options[10].textContent).toBe('10');
-    expect(document.querySelectorAll('button[aria-label^="+ "]')).toHaveLength(3);
-    expect(document.querySelectorAll('.extdatasrc-plugin-game-details-list-editor')).toHaveLength(3);
-    expect(document.querySelectorAll('.Field.Background.Panel')).toHaveLength(5);
-    expect(document.querySelector('.SectionTopLine .Title[role="heading"]')?.textContent).toBe('External Game Details');
+    expect(document.querySelectorAll('.DialogButton')).toHaveLength(0);
+    // Five settings rows plus a row of saved values for each of the two filled lists.
+    expect(document.querySelectorAll('.Field.Background.Panel')).toHaveLength(7);
+    expect(document.querySelector('.DialogControlsSectionHeader')?.textContent).toBe('External Game Details');
     expect(document.querySelector('.DialogSubHeader')).toBeNull();
     const developerInput = document.querySelector('input[aria-label="Developer"]')!;
-    expect(developerInput.closest('.AsyncBackedInputChildren')?.querySelector(':scope > button[aria-label="+ Developer"]')).not.toBeNull();
+    // Themes such as Adwaita stretch inputs over their row, so a row holds nothing but label and input.
+    const developerRow = developerInput.closest('.Field')!;
+    expect(developerRow.querySelectorAll('button, ul, .FieldDescription')).toHaveLength(0);
     expect(developerInput.closest('label')).toBeNull();
     expect(document.querySelector('.DialogInput_CopyAction')).toBeNull();
-    expect(document.querySelector('ul[aria-label="Developer"]')?.closest('.extdatasrc-plugin-game-details-list-editor')).not.toBeNull();
+    expect(developerRow.nextElementSibling?.querySelector('ul[aria-label="Developer"]')).not.toBeNull();
     expect(developerInput.getAttribute('style')).toBeNull();
     expect(document.querySelector('[role="status"],[role="alert"]')).toBeNull();
 
@@ -85,7 +111,8 @@ test('release date dropdowns save valid changes and clear on an empty selection'
     expect(dropdowns().slice(3).map(dropdown => dropdown.value)).toEqual(['2023', '1', '15']);
     expect(runtime.savedDetails[id].developer).toEqual(['Studio']);
     expect(document.querySelector('[role="status"],[role="alert"]')).toBeNull();
-    expect(dropdowns().slice(0, 3).map(dropdown => dropdown.selectedOptions[0].textContent)).toEqual(['----', '--------', '--']);
+    expect(dropdowns().slice(0, 3).map(dropdown => dropdown.selectedOptions[0].textContent))
+      .toEqual(['----', '--------', '--']);
     expect(isCalendarDate('2024-02-29')).toBe(true);
     expect(isCalendarDate('2025-02-29')).toBe(false);
     expect(isCalendarDate('1959-12-31')).toBe(false);
@@ -98,10 +125,9 @@ test('release date dropdowns save valid changes and clear on an empty selection'
   }
 });
 
-
 test('failed automatic release-date writes keep the saved selection visible', async () => {
   document.body.replaceChildren();
-  runtime.savedDetails = { [id]: { releaseDate: '2024-02-29', addedToLibraryDate: '2023-01-15', developer: ['Studio'], publisher: ['Publisher'] } };
+  runtime.savedDetails = { [id]: savedShortcutDetails() };
   const manager = new GameDetailsManager();
   const root = createRoot(document.body);
   const originalSet = backend.setGameDetail;
@@ -124,7 +150,6 @@ test('failed automatic release-date writes keep the saved selection visible', as
     manager.dispose();
   }
 });
-
 
 test('configured release dates survive Steam overview updates and restore native dates', async () => {
   runtime.savedDetails = { [id]: { releaseDate: '2026-10-01', addedToLibraryDate: '2024-02-13' } };
@@ -177,16 +202,18 @@ test('configured release dates survive Steam overview updates and restore native
     expect(store.GetAppOverviewByAppID(Number(id))?.GetCanonicalReleaseDate()).toBe(expected);
     expect(store.GetAppOverviewByAppID(Number(id))).not.toBe(original);
     expect(store.GetAppOverviewByAppID(Number(id))?.GetReleaseYearString()).toBe('2026');
-    expect(store.GetAppOverviewByAppID(Number(id))?.rt_purchased_time).toBe(Math.floor(new Date(2024, 1, 13, 12).getTime() / 1000));
+    expect(store.GetAppOverviewByAppID(Number(id))?.rt_purchased_time)
+      .toBe(Math.floor(new Date(2024, 1, 13, 12).getTime() / 1000));
     expect(store.GetAppOverviewByAppID(570)?.GetCanonicalReleaseDate()).toBe(1373389200);
     await manager.set(id, 'tags', [' RPG ', 'Co-op', 'RPG']);
-    const tags = () => [...store.GetAppOverviewByAppID(Number(id))!.GetStoreTags()].map(tag => store.GetLocalizationForStoreTag(tag));
+    const tags = () => [...store.GetAppOverviewByAppID(Number(id))!.GetStoreTags()]
+      .map(tag => store.GetLocalizationForStoreTag(tag));
     expect(tags()).toEqual(['Native Tag', 'RPG', 'Co-op']);
     store.m_mapStoreTagLocalization = { 5: 'Native Tag' };
     expect(tags()).toEqual(['Native Tag', 'RPG', 'Co-op']);
     expect([...store.GetAppOverviewByAppID(570)!.GetStoreTags()]).toEqual([5]);
     await manager.set(id, 'tags', [19, 4182, 1685, 'Custom']);
-    expect([...store.GetAppOverviewByAppID(Number(id))!.GetStoreTags()]).toEqual([5, 19, 4182, 1685, -3]);
+    expect([...store.GetAppOverviewByAppID(Number(id))!.GetStoreTags()]).toEqual([5, 19, 4182, 1685, CUSTOM_TAG]);
     expect(store.GetAppOverviewByAppID(Number(id))!.BHasStoreCategory(2)).toBe(true);
     expect(store.GetAppOverviewByAppID(Number(id))!.BHasStoreCategory(9)).toBe(true);
     expect(store.GetAppOverviewByAppID(570)!.BHasStoreCategory(2)).toBe(false);
@@ -197,7 +224,8 @@ test('configured release dates survive Steam overview updates and restore native
     await tick();
     expect(store.GetAppOverviewByAppID(Number(id))?.GetCanonicalReleaseDate()).toBe(expected);
     expect(store.GetAppOverviewByAppID(Number(id))).not.toBe(updated);
-    expect(store.GetAppOverviewByAppID(Number(id))?.rt_purchased_time).toBe(Math.floor(new Date(2024, 1, 13, 12).getTime() / 1000));
+    expect(store.GetAppOverviewByAppID(Number(id))?.rt_purchased_time)
+      .toBe(Math.floor(new Date(2024, 1, 13, 12).getTime() / 1000));
     expect(tags()).toEqual(['Native Tag', 'RPG', 'Co-op']);
     await manager.set(id, 'tags', ['Co-op']);
     expect(tags()).toEqual(['Native Tag', 'Co-op']);
@@ -217,7 +245,8 @@ test('configured release dates survive Steam overview updates and restore native
     await manager.set(id, 'releaseDate', '2025-04-28');
     await manager.set(id, 'addedToLibraryDate', '');
     expect(store.GetAppOverviewByAppID(Number(id))?.rt_purchased_time).toBe(100);
-    expect(store.GetAppOverviewByAppID(Number(id))?.GetCanonicalReleaseDate()).toBe(Math.floor(new Date(2025, 3, 28, 12).getTime() / 1000));
+    expect(store.GetAppOverviewByAppID(Number(id))?.GetCanonicalReleaseDate())
+      .toBe(Math.floor(new Date(2025, 3, 28, 12).getTime() / 1000));
     await manager.clear(id);
     expect(store.GetAppOverviewByAppID(Number(id))).toBe(updated);
     expect(store.GetAppOverviewByAppID(Number(id))?.GetCanonicalReleaseDate()).toBe(0);
@@ -308,8 +337,12 @@ async function setupShortcutFilters(binding: string) {
   const previousLibraryModule = runtime.libraryModule;
   const jsxRuntime = {
     Fragment: Symbol.for('react.fragment'),
-    jsx(_type: unknown, props: { collection?: { id: string }; ignoreFiltering?: boolean }) { return { $$typeof: Symbol.for('react.transitional.element'), props }; },
-    jsxs(_type: unknown, props: { collection?: { id: string }; ignoreFiltering?: boolean }) { return { $$typeof: Symbol.for('react.transitional.element'), props }; },
+    jsx(_type: unknown, props: { collection?: { id: string }; ignoreFiltering?: boolean }) {
+      return { $$typeof: Symbol.for('react.transitional.element'), props };
+    },
+    jsxs(_type: unknown, props: { collection?: { id: string }; ignoreFiltering?: boolean }) {
+      return { $$typeof: Symbol.for('react.transitional.element'), props };
+    },
   };
   runtime.libraryModule = jsxRuntime;
   runtime.nativeModuleCandidates = [...previousModules, Filter];
@@ -329,7 +362,8 @@ async function setupShortcutFilters(binding: string) {
       expect(new Filter().GetTagsString()).toBe('?tags=19,-1');
       runtime.nativeModuleCandidates = previousModules;
       runtime.libraryModule = previousLibraryModule;
-      expect(jsxRuntime.jsx(null, { collection: { id: 'deck-desktop-apps' }, ignoreFiltering: true }).props.ignoreFiltering).toBe(true);
+      const grid = jsxRuntime.jsx(null, { collection: { id: 'deck-desktop-apps' }, ignoreFiltering: true });
+      expect(grid.props.ignoreFiltering).toBe(true);
       expect(matches.size).toBe(0);
       expect(store.GetAppOverviewByAppID(Number(id))!.BHasStoreTag(19)).toBe(false);
       Object.assign(window, { appStore: previousStore, collectionStore: previousCollections });
@@ -339,7 +373,61 @@ async function setupShortcutFilters(binding: string) {
   };
 }
 
-test.each(['eager', 'lazy'])('%s bound filters apply the active filter to the Big Picture non-Steam grid', async binding => {
+test('remote library disconnect reapplies metadata after the final native overview update', async () => {
+  const context = await setupShortcutFilters('lazy');
+  const { store, Overview, matches, manager, apps, notifications, collections } = context;
+  const hookedOnChange = collections.OnAppOverviewChange;
+  try {
+    await manager.set(id, 'releaseDate', '2024-02-29');
+    await manager.set(id, 'addedToLibraryDate', '2023-01-15');
+    apps.set(Number(id), new Overview(Number(id)));
+    notifications.forEach(notify => notify());
+    await tick();
+    expect(store.GetAppOverviewByAppID(Number(id))!.BHasStoreTag(19)).toBe(true);
+
+    // Steam's final disconnect update arrives after the native subscription fires.
+    const local = new Overview(Number(id));
+    apps.set(Number(id), local);
+    collections.OnAppOverviewChange([local], []);
+    await tick();
+    const view = store.GetAppOverviewByAppID(Number(id))!;
+    expect(view.rt_original_release_date).toBe(Math.floor(new Date(2024, 1, 29, 12).getTime() / 1000));
+    expect((view as typeof view & { rt_purchased_time: number }).rt_purchased_time)
+      .toBe(Math.floor(new Date(2023, 0, 15, 12).getTime() / 1000));
+    expect(view.GetStoreTags()).toEqual(new Set([5, 19, CUSTOM_TAG]));
+    expect(matches).toEqual(new Set([Number(id)]));
+    expect(store.GetAppOverviewByAppID(570)!.rt_original_release_date).toBe(0);
+
+    // Unload before a queued sync must leave the latest native value intact.
+    collections.OnAppOverviewChange([view], []);
+  } finally {
+    context.dispose();
+    expect(collections.OnAppOverviewChange).not.toBe(hookedOnChange);
+    await tick();
+    expect(store.GetAppOverviewByAppID(Number(id))!.rt_original_release_date).toBe(0);
+  }
+});
+
+test('publishing overviews does not resync through the own library notification', async () => {
+  const context = await setupShortcutFilters('lazy');
+  const { store, manager } = context;
+  const lookup = store.GetAppOverviewByAppID;
+  let lookups = 0;
+  store.GetAppOverviewByAppID = (appId: number) => {
+    lookups++;
+    return lookup(appId);
+  };
+  try {
+    await manager.set(id, 'releaseDate', '2024-02-29');
+    await tick();
+    expect(lookups).toBe(1);
+  } finally {
+    store.GetAppOverviewByAppID = lookup;
+    context.dispose();
+  }
+});
+
+test.each(BINDINGS)('%s bound filters apply the active filter to the Big Picture non-Steam grid', async binding => {
   const context = await setupShortcutFilters(binding);
   const { jsxRuntime } = context;
   try {
@@ -355,7 +443,7 @@ test.each(['eager', 'lazy'])('%s bound filters apply the active filter to the Bi
   }
 });
 
-test.each(['eager', 'lazy'])('%s bound filters keep custom tags out of Store links and Steam Cloud collections', async binding => {
+test.each(BINDINGS)('%s bound filters keep custom tags out of Store links and cloud collections', async binding => {
   const context = await setupShortcutFilters(binding);
   const { Filter, collections, counters } = context;
   try {
@@ -381,20 +469,20 @@ test.each(['eager', 'lazy'])('%s bound filters keep custom tags out of Store lin
   }
 });
 
-test.each(['eager', 'lazy'])('%s bound filters include shortcut tags through edits and native cache replacements', async binding => {
+test.each(BINDINGS)('%s bound filters see shortcut tags after edits and native cache replacements', async binding => {
   const context = await setupShortcutFilters(binding);
   const { store, Overview, matches, manager, apps, notifications } = context;
   try {
     const hasTag = store.GetAppOverviewByAppID(Number(id))!.BHasStoreTag;
     expect(store.GetAppOverviewByAppID(Number(id))).toBeInstanceOf(Overview);
     expect(hasTag(19)).toBe(true);
-    expect(hasTag(-1)).toBe(true);
+    expect(hasTag(CUSTOM_TAG)).toBe(true);
     expect(hasTag(5)).toBe(true);
     const view = store.GetAppOverviewByAppID(Number(id))!;
     const getTags = view.GetStoreTags;
-    expect(getTags()).toEqual(new Set([5, 19, -1]));
+    expect(getTags()).toEqual(new Set([5, 19, CUSTOM_TAG]));
     expect(view.GetStoreTags).toBe(getTags);
-    expect(view.GetStoreTags()).toEqual(new Set([5, 19, -1]));
+    expect(view.GetStoreTags()).toEqual(new Set([5, 19, CUSTOM_TAG]));
     expect(store.GetAppOverviewByAppID(570)!.BHasStoreTag(19)).toBe(false);
     expect(matches).toEqual(new Set([Number(id)]));
     await manager.set(id, 'tags', ['Custom']);
@@ -424,12 +512,6 @@ test('Steam tag search saves IDs, keeps legacy names and displays localized name
   document.body.replaceChildren();
   runtime.savedDetails = { [id]: { tags: ['Action', 'Custom'] } };
   const previous = (window as any).appStore;
-  const previousClasses = runtime.nativeClassCandidates;
-  runtime.nativeClassCandidates = [...previousClasses, {
-    Container: 'NativeFilters', FilterBucket: 'NativeFilterBucket', SearchResultsBox: 'NativeSearchResultsBox',
-    FilterBucketBoxes: 'NativeFilterBucketBoxes', Row: 'NativeFilterRow', NotMoving: 'NativeNotMoving', Checkbox: 'NativeFilterCheckbox',
-    FilterStoreTag: 'NativeStoreTag', Selected: 'NativeSelectedTag',
-  }];
   const originalSet = backend.setGameDetail;
   const store = {
     m_mapStoreTagLocalization: { 19: 'Action', 4231: 'Action RPG', 4182: 'Singleplayer' } as Record<number, string>,
@@ -447,16 +529,17 @@ test('Steam tag search saves IDs, keeps legacy names and displays localized name
     await act(async () => { root.render(h(ExternalGameDetails, { appId: id, manager })); await tick(); });
     expect(manager.details[id].tags).toEqual(['Action', 'Custom']);
     const input = document.querySelector<HTMLInputElement>('input[aria-label="Tags"]')!;
-    input.getBoundingClientRect = () => ({ left: 12, top: 720, bottom: 746, right: 312, width: 300, height: 26, x: 12, y: 720, toJSON() {} });
+    input.getBoundingClientRect = () => ({
+      left: 12, top: 720, bottom: 746, right: 312, width: 300, height: 26, x: 12, y: 720, toJSON() {},
+    });
     await typeText(input, 'AC');
     const checkboxes = () => [...document.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')];
-    const popup = document.querySelector<HTMLDivElement>('.extdatasrc-plugin-game-details-tag-suggestions-list')!;
-    expect(window.getComputedStyle(popup.closest<HTMLDivElement>('.NativeFilters')!).position).toBe('fixed');
-    expect(popup.closest<HTMLDivElement>('.NativeFilters')!.style.bottom).toBe(`${window.innerHeight - 720}px`);
-    expect(popup.closest('.extdatasrc-plugin-game-details-list-editor')).toBeNull();
-    expect(popup.classList.contains('NativeFilterBucketBoxes')).toBe(true);
-    expect(popup.closest('.NativeFilters .NativeFilterBucket.NativeSearchResultsBox')).not.toBeNull();
-    expect(checkboxes()[0].closest('.NativeFilterRow .NativeFilterCheckbox')).not.toBeNull();
+    const popup = document.querySelector<HTMLDivElement>('.extdatasrc-plugin-tag-suggestions')!;
+    expect(window.getComputedStyle(popup).position).toBe('fixed');
+    // Opens above the input when there is no room below, with a 4px gap.
+    expect(popup.style.bottom).toBe(`${window.innerHeight - 720 + 4}px`);
+    expect(popup.closest('.Field')).toBeNull();
+    expect(popup.contains(checkboxes()[0])).toBe(true);
     expect(checkboxes().map(box => box.parentElement!.textContent)).toEqual(['Action', 'Action RPG']);
     expect(checkboxes().every(box => !box.checked)).toBe(true);
     await act(async () => { checkboxes()[0].click(); await tick(); });
@@ -464,13 +547,13 @@ test('Steam tag search saves IDs, keeps legacy names and displays localized name
     await act(async () => { checkboxes()[1].click(); await tick(); });
     expect(input.value).toBe('AC');
     expect(runtime.savedDetails[id].tags).toEqual(['Action', 'Custom', 19, 4231]);
-    const steamChip = document.querySelector<HTMLButtonElement>('button[aria-label="Clear: Action RPG"]')!.closest('li')!;
-    expect(steamChip.classList.contains('NativeStoreTag')).toBe(true);
-    expect(steamChip.classList.contains('NativeSelectedTag')).toBe(true);
-    expect(window.getComputedStyle(steamChip).backgroundColor).toBe('rgba(0, 0, 0, 0)');
+    const steamChip = document.querySelector<HTMLButtonElement>('button[aria-label="Clear: Action RPG"]')!
+      .closest('li')!;
+    expect(steamChip.classList.contains('extdatasrc-plugin-token-store')).toBe(true);
+    expect(window.getComputedStyle(steamChip).backgroundColor).toBe('rgb(26, 159, 255)');
     const customChip = document.querySelector<HTMLButtonElement>('button[aria-label="Clear: Custom"]')!.closest('li')!;
-    expect(customChip.classList.contains('NativeStoreTag')).toBe(false);
-    expect(window.getComputedStyle(customChip).backgroundColor).toBe('rgba(255, 255, 255, 0.08)');
+    expect(customChip.classList.contains('extdatasrc-plugin-token-store')).toBe(false);
+    expect(window.getComputedStyle(customChip).backgroundColor).toBe('rgba(255, 255, 255, 0.1)');
     expect(checkboxes().every(box => box.checked)).toBe(true);
     backend.setGameDetail = async () => false;
     await act(async () => { checkboxes()[1].click(); await tick(); });
@@ -486,35 +569,32 @@ test('Steam tag search saves IDs, keeps legacy names and displays localized name
     await act(async () => { root.render(h(ExternalGameDetails, { appId: id, manager: reloaded })); await tick(); });
     expect(document.querySelector('ul[aria-label="Tags"]')!.textContent).toContain('Aktion');
     expect(document.querySelector('ul[aria-label="Tags"]')!.textContent).toContain('Action');
-    await act(async () => { document.querySelector<HTMLButtonElement>('button[aria-label="Clear: Aktion"]')!.click(); await tick(); });
+    await clickLabeled('Clear: Aktion');
     expect(runtime.savedDetails[id].tags).toEqual(['Action', 'Custom']);
     await expect(reloaded.set(id, 'tags', [-1])).rejects.toThrow();
     await expect(reloaded.set(id, 'tags', [1.5])).rejects.toThrow();
     await expect(reloaded.set(id, 'tags', [0])).rejects.toThrow();
     const nextInput = document.querySelector<HTMLInputElement>('input[aria-label="Tags"]')!;
     await typeText(nextInput, 'Ak');
-    expect(document.querySelector('.extdatasrc-plugin-game-details-tag-suggestions-list')).not.toBeNull();
-    await act(async () => { nextInput.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); });
-    expect(document.querySelector('.extdatasrc-plugin-game-details-tag-suggestions-list')).toBeNull();
+    expect(document.querySelector('.extdatasrc-plugin-tag-suggestions')).not.toBeNull();
+    await pressKey(nextInput, 'Escape');
+    expect(document.querySelector('.extdatasrc-plugin-tag-suggestions')).toBeNull();
     await act(async () => { nextInput.blur(); nextInput.focus(); });
-    expect(document.querySelector('.extdatasrc-plugin-game-details-tag-suggestions-list')).not.toBeNull();
+    expect(document.querySelector('.extdatasrc-plugin-tag-suggestions')).not.toBeNull();
     await act(async () => { document.querySelector<HTMLInputElement>('input[aria-label="Developer"]')!.focus(); });
-    expect(document.querySelector('.extdatasrc-plugin-game-details-tag-suggestions-list')).toBeNull();
+    expect(document.querySelector('.extdatasrc-plugin-tag-suggestions')).toBeNull();
     reloaded.dispose();
   } finally {
     backend.setGameDetail = originalSet;
     await act(async () => root.unmount());
     Object.assign(window, { appStore: previous });
-    runtime.nativeClassCandidates = previousClasses;
     manager.dispose();
   }
 });
 
-
-
 test('added date and company fields save independently, clear, and survive reload', async () => {
   document.body.replaceChildren();
-  runtime.savedDetails = { [id]: { releaseDate: '2024-02-29', addedToLibraryDate: '2023-01-15', developer: ['Studio'], publisher: ['Publisher'] } };
+  runtime.savedDetails = { [id]: savedShortcutDetails() };
   const manager = new GameDetailsManager();
   const root = createRoot(document.body);
   const originalSet = backend.setGameDetail;
@@ -528,19 +608,21 @@ test('added date and company fields save independently, clear, and survive reloa
     const publisher = document.querySelector<HTMLInputElement>('input[aria-label="Publisher"]')!;
     expect([developer.value, publisher.value]).toEqual(['', '']);
     expect(document.querySelector('ul[aria-label="Developer"]')?.textContent).toContain('Studio');
-    const edit = async (input: HTMLInputElement, value: string, enter = false) => {
+    const edit = async (input: HTMLInputElement, value: string) => {
       await typeText(input, value);
-      if (enter) await act(async () => {
+      await act(async () => {
         input.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
         await tick();
       });
-      if (!enter) await act(async () => { document.querySelector<HTMLButtonElement>(`button[aria-label="+ ${input.getAttribute('aria-label')}"]`)!.click(); await tick(); });
     };
     await edit(developer, '  New Studio  ');
-    await edit(publisher, 'New Publisher', true);
-    expect(runtime.savedDetails[id]).toEqual({ releaseDate: '2024-02-29', addedToLibraryDate: '2025-01-15', developer: ['Studio', 'New Studio'], publisher: ['Publisher', 'New Publisher'] });
+    await edit(publisher, 'New Publisher');
+    expect(runtime.savedDetails[id]).toEqual({
+      releaseDate: '2024-02-29', addedToLibraryDate: '2025-01-15',
+      developer: ['Studio', 'New Studio'], publisher: ['Publisher', 'New Publisher'],
+    });
     expect(developer.value).toBe('');
-    await edit(developer, 'New Studio', true);
+    await edit(developer, 'New Studio');
     expect(runtime.savedDetails[id].developer).toEqual(['Studio', 'New Studio']);
     const restarted = new GameDetailsManager();
     await restarted.load();
@@ -571,7 +653,9 @@ test('added date and company fields save independently, clear, and survive reloa
   }
 });
 
-test.each(['Developer', 'Publisher', 'Tags'])('Enter restores %s focus after the disabled save interval', async label => {
+const TOKEN_FIELDS = ['Developer', 'Publisher', 'Tags'];
+
+test.each(TOKEN_FIELDS)('Enter restores %s focus after the disabled save interval', async label => {
   document.body.replaceChildren();
   const manager = new GameDetailsManager();
   const root = createRoot(document.body);
@@ -583,7 +667,7 @@ test.each(['Developer', 'Publisher', 'Tags'])('Enter restores %s focus after the
     backend.setGameDetail = async (...args) => { await pending; return originalSet(...args); };
     const input = document.querySelector<HTMLInputElement>(`input[aria-label="${label}"]`)!;
     await typeText(input, 'New entry, Inc.');
-    await act(async () => { input.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); });
+    await pressKey(input, 'Enter');
     expect(input.disabled).toBe(true);
     // Chromium blurs disabled inputs; move focus explicitly in JSDOM.
     const other = document.createElement('button');
@@ -613,16 +697,15 @@ test('tags save as removable chips, survive reload and keep failed drafts', asyn
   try {
     await act(async () => { root.render(h(ExternalGameDetails, { appId: id, manager })); await tick(); });
     const input = document.querySelector<HTMLInputElement>('input[aria-label="Tags"]')!;
-    const add = async (name: string, enter = false) => {
+    const add = async (name: string) => {
       await typeText(input, name);
       await act(async () => {
-        if (enter) input.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-        else document.querySelector<HTMLButtonElement>('button[aria-label="+ Tags"]')!.click();
+        input.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
         await tick();
       });
     };
     await add(' RPG, , Co-op, ');
-    await add('RPG, Co-op', true);
+    await add('RPG, Co-op');
     expect(runtime.savedDetails[id].tags).toEqual(['RPG', 'Co-op']);
     const list = document.querySelector<HTMLUListElement>('ul[aria-label="Tags"]')!;
     expect(window.getComputedStyle(list).flexWrap).toBe('wrap');
@@ -636,9 +719,8 @@ test('tags save as removable chips, survive reload and keep failed drafts', asyn
     expect(input.value).toBe('Adventure');
     expect(manager.details[id].tags).toEqual(['RPG', 'Co-op']);
     backend.setGameDetail = originalSet;
-    for (const tag of ['RPG', 'Co-op']) {
-      await act(async () => { document.querySelector<HTMLButtonElement>(`button[aria-label="Clear: ${tag}"]`)!.click(); await tick(); });
-    }
+    for (const tag of ['RPG', 'Co-op'])
+      await clickLabeled(`Clear: ${tag}`);
     expect(runtime.savedDetails[id]).toBeUndefined();
     expect(document.querySelector('ul[aria-label="Tags"]')).toBeNull();
   } finally {
@@ -651,7 +733,10 @@ test('tags save as removable chips, survive reload and keep failed drafts', asyn
 test('old date objects are ignored and replaced by ISO strings on the next save', async () => {
   const original = backend.getGameDetails;
   backend.getGameDetails = async () => ({
-    [id]: { releaseDate: { year: 2024, month: 2, day: 29 }, addedToLibrary: '2024-02-29', addedToLibraryDate: '2024-02-30', developer: ['Studio'] },
+    [id]: {
+      releaseDate: { year: 2024, month: 2, day: 29 }, addedToLibrary: '2024-02-29', addedToLibraryDate: '2024-02-30',
+      developer: ['Studio'],
+    },
   }) as unknown as string;
   const manager = new GameDetailsManager();
   try {
@@ -668,15 +753,24 @@ test('old date objects are ignored and replaced by ISO strings on the next save'
 
 test('company arrays remain in Steam associations through edits and native cache replacements', async () => {
   const previous = (window as any).appDetailsStore;
-  const native = { associationData: { rgDevelopers: [{ strName: 'Native Studio', strURL: 'native' }], rgPublishers: [] as { strName: string; strURL: string }[], rgFranchises: [] } };
+  const native = {
+    associationData: {
+      rgDevelopers: [{ strName: 'Native Studio', strURL: 'native' }],
+      rgPublishers: [] as { strName: string; strURL: string }[],
+      rgFranchises: [],
+    },
+  };
   const cache = new Map([[Number(id), native], [570, native]]);
   const store = {
     m_mapAppData: cache,
     GetAppData(appId: number) {
-      if (!cache.has(appId)) cache.set(appId, { associationData: { rgDevelopers: [], rgPublishers: [], rgFranchises: [] } });
+      if (!cache.has(appId))
+        cache.set(appId, { associationData: { rgDevelopers: [], rgPublishers: [], rgFranchises: [] } });
       return cache.get(appId)!;
     },
   };
+  const companies = (field: 'rgDevelopers' | 'rgPublishers') =>
+    store.GetAppData(Number(id)).associationData[field].map(value => value.strName);
   Object.assign(window, { appDetailsStore: store });
   const manager = new GameDetailsManager();
   await manager.load();
@@ -688,16 +782,18 @@ test('company arrays remain in Steam associations through edits and native cache
   try {
     const cached = cache.get(Number(id))!;
     expect(cached.associationData.rgDevelopers.map(value => value.strName)).toEqual(['Studio', 'Other Studio']);
-    expect(store.GetAppData(Number(id)).associationData.rgPublishers.map(value => value.strName)).toEqual(['Publisher', 'Other Publisher']);
+    expect(companies('rgPublishers')).toEqual(['Publisher', 'Other Publisher']);
     expect(store.GetAppData(570)).toBe(native);
     await manager.set(id, 'developer', ['Other Studio']);
     expect(cached.associationData.rgDevelopers.map(value => value.strName)).toEqual(['Other Studio']);
-    updated = { associationData: { ...native.associationData, rgDevelopers: [{ strName: 'Updated native', strURL: '' }] } };
+    updated = {
+      associationData: { ...native.associationData, rgDevelopers: [{ strName: 'Updated native', strURL: '' }] },
+    };
     cache.set(Number(id), updated);
-    expect(store.GetAppData(Number(id)).associationData.rgDevelopers.map(value => value.strName)).toEqual(['Other Studio']);
+    expect(companies('rgDevelopers')).toEqual(['Other Studio']);
     await manager.set(id, 'developer', []);
-    expect(store.GetAppData(Number(id)).associationData.rgDevelopers.map(value => value.strName)).toEqual(['Updated native']);
-    expect(store.GetAppData(Number(id)).associationData.rgPublishers.map(value => value.strName)).toEqual(['Publisher', 'Other Publisher']);
+    expect(companies('rgDevelopers')).toEqual(['Updated native']);
+    expect(companies('rgPublishers')).toEqual(['Publisher', 'Other Publisher']);
     await manager.clear(id);
     expect(store.GetAppData(Number(id)).associationData).toBe(updated.associationData);
   } finally {
@@ -709,11 +805,45 @@ test('company arrays remain in Steam associations through edits and native cache
   }
 });
 
+test('company overrides wait for Steam to load app data and publish outside the read path', async () => {
+  const previous = (window as any).appDetailsStore;
+  type Association = { strName: string; strURL: string };
+  type AppData = { associationData: { rgDevelopers: Association[]; rgPublishers: never[]; rgFranchises: never[] } };
+  const cache = new Map<number, AppData>();
+  const store = { m_mapAppData: cache, GetAppData: (appId: number) => cache.get(appId) };
+  Object.assign(window, { appDetailsStore: store });
+  const manager = new GameDetailsManager();
+  await manager.load();
+  await manager.set(id, 'developer', ['Studio']);
+  const cleanup = registerGameDetails(manager);
+  try {
+    expect(store.GetAppData(Number(id))).toBeUndefined();
+    await manager.set(id, 'publisher', ['Publisher']);
+
+    const native = {
+      associationData: { rgDevelopers: [{ strName: 'Native', strURL: '' }], rgPublishers: [], rgFranchises: [] },
+    };
+    cache.set(Number(id), native);
+    const view = store.GetAppData(Number(id))!;
+    expect(view.associationData.rgDevelopers.map(value => value.strName)).toEqual(['Studio']);
+    expect(cache.get(Number(id))).toBe(native);
+    expect(store.GetAppData(Number(id))).toBe(view);
+    await Promise.resolve();
+    expect(cache.get(Number(id))).toBe(view);
+  } finally {
+    cleanup();
+    Object.assign(window, { appDetailsStore: previous });
+    manager.dispose();
+  }
+});
+
 test('shortcut Game Info keeps native content without adding saved metadata', async () => {
   document.body.replaceChildren();
   class About extends Component<{ overview: { appid: number } }> {
     render() {
-      return h('div', null, h('span', null, '#AppDetails_Shortcut_Explanation #AppDetails_Developer'), h('div', null, 'Native controls'));
+      return h('div', null,
+        h('span', null, '#AppDetails_Shortcut_Explanation #AppDetails_Developer'),
+        h('div', null, 'Native controls'));
     }
   }
   class AboutContainer extends Component<{ overview: { appid: number } }> {
@@ -721,14 +851,18 @@ test('shortcut Game Info keeps native content without adding saved metadata', as
     componentDidMount() {}
     render() {
       const classes = { AppGameInfoContainer: 'AboutContainer', GameInfoShadow: 'Shadow' };
-      return h('div', { ref: this.m_contentRef, className: classes.AppGameInfoContainer }, h(About, this.props), h('div', { className: classes.GameInfoShadow }));
+      return h('div', { ref: this.m_contentRef, className: classes.AppGameInfoContainer },
+        h(About, this.props), h('div', { className: classes.GameInfoShadow }));
     }
   }
   const originalMount = AboutContainer.prototype.componentDidMount;
   const previousCandidates = runtime.nativeModuleCandidates;
   const previousClasses = runtime.nativeClassCandidates;
   runtime.nativeModuleCandidates = [AboutContainer];
-  runtime.nativeClassCandidates = [{ AssociationList: 'AssociationList', Stats: 'Stats', SectionContainer: 'SectionContainer', Label: 'Label', Association: 'Association', Release: 'Release', Date: 'Date' }];
+  runtime.nativeClassCandidates = [{
+    AssociationList: 'AssociationList', Stats: 'Stats', SectionContainer: 'SectionContainer', Label: 'Label',
+    Association: 'Association', Release: 'Release', Date: 'Date',
+  }];
   const manager = new GameDetailsManager();
   await manager.load();
   await manager.set(id, 'developer', ['Studio']);
@@ -757,4 +891,29 @@ test('shortcut Game Info keeps native content without adding saved metadata', as
     runtime.nativeClassCandidates = previousClasses;
     manager.dispose();
   }
+});
+
+test('a failing game details subscriber does not reject a saved override', async () => {
+  const manager = new GameDetailsManager();
+  const originalError = console.error;
+  let notified = false;
+  console.error = () => {};
+  manager.subscribe(() => { throw new Error('Steam store changed'); });
+  manager.subscribe(() => { notified = true; });
+  try {
+    await manager.load();
+    await expect(manager.set(id, 'developer', ['Studio'])).resolves.toBeUndefined();
+    expect(manager.details[id]).toEqual({ developer: ['Studio'] });
+    expect(notified).toBe(true);
+  } finally {
+    console.error = originalError;
+    manager.dispose();
+  }
+});
+
+test('custom tag IDs are negative, derived from the name and stable across sessions', () => {
+  expect(localTagId('Custom')).toBe(localTagId('Custom'));
+  expect(localTagId('Custom')).not.toBe(localTagId('custom'));
+  for (const name of ['', 'Custom', 'Roguelike Deckbuilder', '日本語'])
+    expect(Number.isSafeInteger(localTagId(name)) && localTagId(name) < 0).toBe(true);
 });

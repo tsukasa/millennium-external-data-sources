@@ -71,7 +71,6 @@ async function generateLocales(): Promise<void> {
   }
 
   const generated = `${JSON.stringify(locales, null, 2)}\n`;
-  if (await readFile(output, 'utf8').catch(() => '') !== generated) {
+  if (await readFile(output, 'utf8').catch(() => '') !== generated)
     await writeFile(output, generated, 'utf8');
-  }
 }

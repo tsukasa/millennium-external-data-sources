@@ -41,7 +41,7 @@ test('native models keep summaries short, preload images and retain dates', asyn
   const contents = 'Full untruncated summary. '.repeat(40);
   const items = [article('a', new Date(2026, 8, 28).getTime() / 1000, { contents, image: 'https://example.com/image.jpg' }),
     article('b', new Date(2025, 8, 28).getTime() / 1000), article('c', null)];
-  const events = createExternalNewsEvents(bindings, '3900360037', items, client);
+  const events = createExternalNewsEvents({ ...bindings, sharedClient: client }, '3900360037', items);
   expect(events.map(event => event.rtEventTime)).toEqual(items.map(item => item.date ?? 0));
   const event = events[0];
   expect((event as any).IsEventLoaded()).toBe(true);
@@ -65,14 +65,24 @@ test('native models keep summaries short, preload images and retain dates', asyn
     appDetailsStore: { GetHeroImages: () => ({ rgHeroImages: background }) },
   };
   try {
-    const fallbackEvents = createExternalNewsEvents(bindings, '3900360037', items, withBackground);
+    const fallbackEvents = createExternalNewsEvents({ ...bindings, sharedClient: withBackground }, '3900360037', items);
     expect([...withBackground.data.entries()].filter(([key]) => key.includes('native-image')).map(([, value]) => value))
       .toEqual([['https://example.com/image.jpg'], background, background]);
     expect(fallbackEvents[1].eventModel.jsondata.localized_capsule_image[0])
       .toBe('https://steamloopback.host/customimages/3900360037_hero.jpg');
+    // Steam drops inactive image queries after five minutes. Reloading the
+    // existing event must restore both candidates, not just the model's JPG.
+    for (const load of ['GetEvent', 'ReloadEvent'] as const) {
+      withBackground.data.clear();
+      expect(await fallbackEvents[1][load]()).toBe(fallbackEvents[1].eventModel);
+      const gid = fallbackEvents[1].eventModel.GID;
+      const imageKey = bindings.imageQueryKey.map(value => value === bindings.probeGid ? gid : value);
+      expect(withBackground.data.get(JSON.stringify(imageKey))).toEqual(background);
+      expect(withBackground.data.get(JSON.stringify(['useFallbackArtworkScreenshot', gid]))).toBeNull();
+    }
   } finally {
     (globalThis as any).window = previousWindow;
   }
-  const other = createExternalNewsEvents(bindings, '3900360038', items, new QueryClient());
+  const other = createExternalNewsEvents({ ...bindings, sharedClient: new QueryClient() }, '3900360038', items);
   expect(other[0].eventModel.GID).not.toBe(model.GID);
 });

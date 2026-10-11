@@ -2,6 +2,7 @@ import { beforeEach, expect, test } from 'bun:test';
 import { act, Component, createElement as h } from 'react';
 import { createRoot } from './helpers/ui-runtime';
 import { installBackend, FeedManager, registerActivityComponents, id, url, runtime } from './helpers/ui-runtime';
+import type { NativeBindings } from '../frontend/steam/news-discovery';
 
 beforeEach(installBackend);
 
@@ -37,7 +38,7 @@ test('native activity controls are removed, actions disabled and later plugin wr
   }
   const feedManager = new FeedManager();
   feedManager.sources[id] = { url, showFeedInWhatsNew: true };
-  const native = { Section, PostTextEntry: Post, Announcement } as unknown as import('../frontend/steam/news-discovery').NativeBindings;
+  const native = { Section, PostTextEntry: Post, Announcement } as unknown as NativeBindings;
   const originalPost = Post.prototype.render;
   const cleanup = registerActivityComponents(feedManager, native);
   const root = createRoot(document.body);
@@ -88,4 +89,3 @@ test('native activity controls are removed, actions disabled and later plugin wr
     feedManager.dispose();
   }
 });
-

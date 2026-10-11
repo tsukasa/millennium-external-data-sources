@@ -1,9 +1,10 @@
 {
   "name": "io.tsukasa.external-data-sources",
-  "version": "0.1.1",
+  "version": "0.1.15",
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@steambrew/starlight": "1.1.6",
+    "@stylistic/eslint-plugin": "^5.10.0",
     "@types/bun": "1.3.11",
     "@types/jsdom": "21.1.7",
     "@types/react": "19.1.1",

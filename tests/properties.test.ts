@@ -1,7 +1,10 @@
 import { beforeEach, expect, test } from 'bun:test';
 import { act, createContext, createElement as h, forwardRef, useEffect, useState } from 'react';
 import { createRoot } from './helpers/ui-runtime';
-import { dom, installBackend, FeedManager, GameDetailsManager, ExternalNewsSource, PluginConfiguration, registerProperties, id, otherId, url, tick, runtime, selectOption } from './helpers/ui-runtime';
+import {
+  dom, installBackend, FeedManager, GameDetailsManager, ExternalNewsSource, PluginConfiguration, registerProperties,
+  id, otherId, url, tick, runtime, selectOption
+} from './helpers/ui-runtime';
 
 beforeEach(installBackend);
 
@@ -10,7 +13,8 @@ test('properties can be enabled and disabled while native settings with hooks ar
   const gameDetails = new GameDetailsManager();
   const pages = [{ title: 'Shortcut', identifier: `/app/${id}/properties/shortcut`, content: null }];
   let activeEffects = 0;
-  const Settings = forwardRef<unknown, { pages: typeof pages; onPageRequested?: (page: string) => void }>(function Settings(props, _ref) {
+  type SettingsProps = { pages: typeof pages; onPageRequested?: (page: string) => void };
+  const Settings = forwardRef<unknown, SettingsProps>(function Settings(props, _ref) {
     const [label] = useState('native');
     const [count, setCount] = useState(0);
     useEffect(() => {
@@ -19,7 +23,8 @@ test('properties can be enabled and disabled while native settings with hooks ar
     }, []);
     return h('div', { className: 'PagedSettingDialog_ContentColumn' },
       h('button', { 'data-native-counter': true, onClick: () => setCount(count + 1) }, `${label}:${count}`),
-      ...props.pages.map(page => h('button', { key: page.identifier, onClick: () => props.onPageRequested?.(page.identifier) }, page.title)));
+      ...props.pages.map(page =>
+        h('button', { key: page.identifier, onClick: () => props.onPageRequested?.(page.identifier) }, page.title)));
   });
   runtime.nativeModuleCandidates = [Settings];
   const root = createRoot(document.body);
@@ -73,15 +78,16 @@ test('properties controls save immediately without saving an unsaved feed URL', 
     expect(document.querySelectorAll('.DialogControlsSection')).toHaveLength(1);
     const dropdownSection = section.querySelector<HTMLElement>('[data-native-dropdown]')!;
     const dropdown = dropdownSection.querySelector<HTMLSelectElement>('select')!;
-    const row = section.querySelector('[data-native-toggle]')!;
-    const toggle = row.querySelector<HTMLButtonElement>('[role="checkbox"]')!;
+    const toggle = section.querySelector<HTMLButtonElement>('[role="checkbox"]')!;
+    const row = toggle.closest('.Field')!;
     expect(section.style.width).toBe('');
     expect(dropdownSection.style.width).toBe('');
     expect(dropdownSection.querySelector('span')?.textContent).toBe("Max Items in What's New");
-    expect(dropdownSection.querySelector('small')?.textContent).toBe("Select how many items from this feed can appear in What's New");
+    expect(dropdownSection.querySelector('small')?.textContent)
+      .toBe("Select how many items from this feed can appear in What's New");
     expect([...dropdown.options].map(option => option.textContent)).toEqual(['Unlimited', '1', '2', '3', '4', '5']);
     expect(dropdown.value).toBe('3');
-    expect(row.querySelector('span')?.textContent).toBe("Show Feed in What's New");
+    expect(row.textContent).toContain("Show Feed in What's New");
     expect(toggle.getAttribute('aria-checked')).toBe('true');
     await act(async () => { toggle.click(); await tick(); });
     expect(toggle.getAttribute('aria-checked')).toBe('false');
@@ -98,7 +104,10 @@ test('properties controls save immediately without saving an unsaved feed URL', 
     expect(restart.sources[id]?.maxItemsFromFeedInWhatsNew).toBe(0);
     restart.dispose();
 
-    await act(async () => { root.render(h(ExternalNewsSource, { key: otherId, appId: otherId, manager: feedManager })); await tick(); });
+    await act(async () => {
+      root.render(h(ExternalNewsSource, { key: otherId, appId: otherId, manager: feedManager }));
+      await tick();
+    });
     const emptyFeedToggle = document.querySelector<HTMLButtonElement>('[role="checkbox"]')!;
     const emptyFeedDropdown = document.querySelector<HTMLSelectElement>('select')!;
     expect(emptyFeedToggle.getAttribute('aria-checked')).toBe('true');
@@ -119,7 +128,7 @@ test('properties controls save immediately without saving an unsaved feed URL', 
     await act(async () => { emptyFeedToggle.click(); await tick(); });
     expect(emptyFeedToggle.getAttribute('aria-checked')).toBe('false');
     expect(runtime.shown[otherId]).toBe(false);
-    expect(document.querySelector('[role="alert"]')?.textContent).toContain('disk error');
+    expect(document.querySelector('[role="alert"]')?.textContent).toBe('Could not save feed source.');
     backend.setMaxItemsFromFeedInWhatsNew = async () => { throw new Error('disk error'); };
     await selectOption(emptyFeedDropdown, '4');
     expect(runtime.maxed[otherId]).toBe(5);
@@ -133,7 +142,64 @@ test('properties controls save immediately without saving an unsaved feed URL', 
     backend.setMaxItemsFromFeedInWhatsNew = originalLimit;
   }
 });
+test('feed URL saves valid input without buttons and clears through the clear action', async () => {
+  document.body.replaceChildren();
+  runtime.saved = { [id]: url };
+  runtime.shown = {};
+  runtime.maxed = {};
+  const feedManager = new FeedManager();
+  const root = createRoot(document.body);
+  const input = () => document.querySelector<HTMLInputElement>('input[data-steam-text-field]')!;
+  const type = async (value: string) => act(async () => {
+    Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value')!.set!.call(input(), value);
+    input().dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    await tick();
+  });
+  const blur = async () => act(async () => {
+    input().dispatchEvent(new dom.window.FocusEvent('focusout', { bubbles: true }));
+    await tick();
+  });
+  try {
+    await act(async () => { root.render(h(ExternalNewsSource, { appId: id, manager: feedManager })); await tick(); });
+    expect(document.querySelectorAll('.DialogButton')).toHaveLength(0);
+    expect(input().value).toBe(url);
 
+    await type('not a url');
+    expect(document.querySelector('[role="alert"]')?.textContent).toBe('Enter an HTTP or HTTPS feed URL.');
+    expect(input().closest('.Field')?.nextElementSibling?.contains(document.querySelector('[role="alert"]')))
+      .toBe(true);
+    await blur();
+    expect(runtime.saved[id]).toBe(url);
+
+    // Hosts without a TLD are valid feed URLs, unlike Steam's mustBeURL check.
+    await type('http://localhost:8080/feed');
+    expect(document.querySelector('[role="alert"]')).toBeNull();
+    // Themes such as Adwaita stretch inputs over their row, so it holds nothing but label and input.
+    expect(input().closest('.Field')?.textContent).toBe('Feed URL');
+    await blur();
+    expect(runtime.saved[id]).toBe('http://localhost:8080/feed');
+    expect(input().disabled).toBe(false);
+
+    await type('https://example.com/delayed');
+    expect(runtime.saved[id]).toBe('http://localhost:8080/feed');
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 800)); await tick(); });
+    expect(runtime.saved[id]).toBe('https://example.com/delayed');
+    expect(document.querySelector('[role="status"]')?.textContent).toBe('Feed settings saved.');
+
+    await act(async () => { document.querySelector<HTMLElement>('.DialogInput_ClearAction')!.click(); await tick(); });
+    expect(input().value).toBe('');
+    expect(runtime.saved[id]).toBeUndefined();
+    expect(document.querySelector('[role="alert"]')).toBeNull();
+    expect(document.querySelector('.DialogInput_ClearAction')).toBeNull();
+
+    // Closing the page saves a URL that is still waiting for the delay.
+    await type(url);
+    await act(async () => { root.unmount(); await tick(); });
+    expect(runtime.saved[id]).toBe(url);
+  } finally {
+    feedManager.dispose();
+  }
+});
 
 test('plugin configuration exposes global numeric controls', async () => {
   document.body.replaceChildren();
@@ -154,7 +220,10 @@ test('plugin configuration exposes global numeric controls', async () => {
     expect(fields[0].closest('.Field')?.textContent).toContain('Minutes between updates');
     const section = document.querySelector<HTMLSelectElement>('[data-native-dropdown]')!;
     expect([...section.options].map(option => option.textContent)).toEqual(['General', 'Feed Settings']);
-    await act(async () => { section.value = 'general'; section.dispatchEvent(new dom.window.Event('change', { bubbles: true })); });
+    await act(async () => {
+      section.value = 'general';
+      section.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+    });
     expect(document.body.textContent).toContain('Right-click a non-Steam game');
     expect(window.getComputedStyle(fields[0].closest<HTMLElement>('.DialogBody')!).display).toBe('none');
   } finally {
@@ -163,20 +232,25 @@ test('plugin configuration exposes global numeric controls', async () => {
   }
 });
 
-
-test('properties tab is added through Steam settings renderer without patching Array.map', async () => {
+test.each([
+  ['React Router context found by name', 'Router'],
+  ['unnamed routing context found during render', undefined],
+])('properties tab joins the Steam settings renderer without patching Array.map (%s)', async (_case, displayName) => {
   const feedManager = new FeedManager();
   const gameDetails = new GameDetailsManager();
   const pages = [{ title: 'Shortcut', identifier: `/app/${id}/properties/shortcut`, content: null },
     { title: 'Playtime', identifier: `/app/${id}/properties/playtime`, content: null }];
-  const Settings = forwardRef<unknown, { pages: typeof pages; page: string; onPageRequested?: (page: string) => void }>(function Settings(props, _ref) {
+  type SettingsProps = { pages: typeof pages; page: string; onPageRequested?: (page: string) => void };
+  const Settings = forwardRef<unknown, SettingsProps>(function Settings(props, _ref) {
     return h('div', { 'data-steam-settings': 'PagedSettingDialog_ContentColumn' },
-      ...props.pages.map(page => h('button', { key: page.identifier, onClick: () => props.onPageRequested?.(page.identifier) }, page.title)),
+      ...props.pages.map(page =>
+        h('button', { key: page.identifier, onClick: () => props.onPageRequested?.(page.identifier) }, page.title)),
       h('span', { 'data-active-page': true }, props.page));
   });
   const settingsType = Settings as typeof Settings & { render: unknown };
   const originalRender = settingsType.render;
   const RouterContext = createContext<{ location: { pathname: string } } | null>(null);
+  RouterContext.displayName = displayName;
   runtime.nativeModuleCandidates = [Settings, RouterContext];
   const originalMap = Array.prototype.map;
   const root = createRoot(document.body);
@@ -196,15 +270,21 @@ test('properties tab is added through Steam settings renderer without patching A
     await act(async () => renderRoute(pages[0].identifier));
     expect(Array.prototype.map).toBe(originalMap);
     expect(pages).toHaveLength(2);
-    expect([...document.querySelectorAll('button')].map(button => button.textContent)).toEqual(['Shortcut', 'Playtime', 'External Data Sources']);
+    expect([...document.querySelectorAll('button')].map(button => button.textContent))
+      .toEqual(['Shortcut', 'Playtime', 'External Data Sources']);
     await act(async () => (document.querySelectorAll('button')[2] as HTMLButtonElement).click());
-    expect(document.querySelector('[data-active-page]')?.textContent).toBe(`/app/${id}/properties/external-data-sources`);
+    expect(document.querySelector('[data-active-page]')?.textContent)
+      .toBe(`/app/${id}/properties/external-data-sources`);
     expect(requested).toEqual([`/app/${id}/properties/external-data-sources`]);
     await act(async () => (document.querySelectorAll('button')[0] as HTMLButtonElement).click());
     expect(document.querySelector('[data-active-page]')?.textContent).toBe(pages[0].identifier);
-    await act(async () => root.render(h(Settings, { pages: [{ ...pages[0], identifier: '/app/570/properties/shortcut' }], page: '/app/570/properties/shortcut' })));
+    const steamApp = '/app/570/properties/shortcut';
+    await act(async () => root.render(h(Settings, { pages: [{ ...pages[0], identifier: steamApp }], page: steamApp })));
     expect(document.querySelectorAll('button')).toHaveLength(1);
-    await act(async () => root.render(h(Settings, { pages: [...pages, { title: 'External Data Sources', identifier: `/app/${id}/properties/external-data-sources`, content: null }], page: pages[0].identifier })));
+    const ownPage = {
+      title: 'External Data Sources', identifier: `/app/${id}/properties/external-data-sources`, content: null,
+    };
+    await act(async () => root.render(h(Settings, { pages: [...pages, ownPage], page: pages[0].identifier })));
     expect(document.querySelectorAll('button')).toHaveLength(3);
   } finally {
     unregister();
@@ -215,4 +295,3 @@ test('properties tab is added through Steam settings renderer without patching A
     gameDetails.dispose();
   }
 });
-

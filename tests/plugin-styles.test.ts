@@ -24,9 +24,8 @@ test('plugin styles share one sheet per document, survive renders, allow themes 
     expect(popup.window.document.head.querySelectorAll(selector)).toHaveLength(1);
     const sheet = document.head.querySelector<HTMLStyleElement>(selector)!;
     for (const rule of sheet.sheet!.cssRules) {
-      for (const selector of (rule as CSSStyleRule).selectorText.split(',')) {
+      for (const selector of (rule as CSSStyleRule).selectorText.split(','))
         expect(selector.trim().startsWith('.extdatasrc-plugin-')).toBe(true);
-      }
     }
     const observer = new window.MutationObserver(() => {});
     observer.observe(document.head, { childList: true, subtree: true, characterData: true });

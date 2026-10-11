@@ -12,7 +12,7 @@ export interface AppOverview {
   BHasStoreTag?(tagId: number): boolean;
 }
 
-export interface SteamAppStore {
+interface SteamAppStore {
   m_mapApps: Map<number, AppOverview>;
   GetAppOverviewByAppID(appId: number): AppOverview | null;
   GetLocalizationForStoreTag?(tagId: number): string | undefined;
@@ -20,42 +20,42 @@ export interface SteamAppStore {
   m_mapStoreTagLocalization?: Record<number, string>;
 }
 
-export interface ClientSettings {
+interface ClientSettings {
   library_whats_new_show_only_product_updates?: boolean;
 }
 
-export interface SettingsStore {
+interface SettingsStore {
   clientSettings?: ClientSettings;
 }
 
 export interface SteamSubscription {
-  Unregister(): void
+  Unregister(): void;
 }
 
-export interface Popup {
+interface Popup {
   window?: Window;
-  m_strName?: string
+  m_strName?: string;
 }
 
-export interface LocalizationManager {
+interface LocalizationManager {
   GetPreferredLocales?(): string[];
 }
 
-export interface BrowserLocation {
-  pathname?: string
+interface BrowserLocation {
+  pathname?: string;
 }
 
 export interface MainWindowBrowserManager {
   m_lastLocation?: BrowserLocation;
 }
 
-export interface HeroImages {
-  rgHeroImages: string[]
+interface HeroImages {
+  rgHeroImages: string[];
 }
 
-export interface AppDetailsStore {
+interface AppDetailsStore {
   GetHeroImages?(app: unknown): HeroImages;
-  GetAppData?(appId: number): AppData;
+  GetAppData?(appId: number): AppData | undefined;
   m_mapAppData?: Map<number, AppData>;
 }
 
@@ -80,12 +80,12 @@ export interface SteamCollection {
   Save(): Promise<unknown>;
 }
 
-export interface PopupManager {
+interface PopupManager {
   GetExistingPopup(name: string): Popup | undefined;
   AddPopupCreatedCallback(callback: (popup: Popup) => void): SteamSubscription;
 }
 
-export interface SteamGlobals {
+interface SteamGlobals {
   LocalizationManager?: LocalizationManager;
   MainWindowBrowserManager?: MainWindowBrowserManager;
   appStore?: SteamAppStore;

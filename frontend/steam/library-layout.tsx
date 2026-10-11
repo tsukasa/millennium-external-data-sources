@@ -15,11 +15,11 @@ export interface LayoutProps {
 
 export type LayoutRenderer = (props: LayoutProps) => ReactNode;
 
-export interface SectionRegistrar {
+interface SectionRegistrar {
   RegisterSection(name: string, element: HTMLElement | null): void;
 }
 
-export interface SeekTargetProps {
+interface SeekTargetProps {
   name: string;
   parent: SectionRegistrar;
   children?: ReactNode;
@@ -37,7 +37,8 @@ export type SeekTarget = ComponentType<SeekTargetProps>;
  * Wraps Steam's library layout renderer to show external news for configured
  * non-Steam shortcuts in the activity section.
  */
-export function createLibraryLayout(original: LayoutRenderer, Seek: SeekTarget, classes: LayoutClasses, feedManager: FeedManager): LayoutRenderer {
+export function createLibraryLayout(original: LayoutRenderer, Seek: SeekTarget, classes: LayoutClasses,
+  feedManager: FeedManager): LayoutRenderer {
   const subscribe = (notify: () => void) => feedManager.subscribe(notify);
   const snapshot = () => feedManager.revision;
 
@@ -69,10 +70,7 @@ export function createLibraryLayout(original: LayoutRenderer, Seek: SeekTarget, 
         ? node.props.className.split(/\s+/).filter(Boolean)
         : [];
 
-      const hasClass = (value: string) => value
-        .split(' ')
-        .every(name => names.includes(name)
-      );
+      const hasClass = (value: string) => value.split(' ').every(name => names.includes(name));
 
       if (inLeftColumn && node.type === Seek && node.props.name === 'activityrollup')
         return cloneElement(node, undefined, null);
@@ -97,9 +95,7 @@ export function createLibraryLayout(original: LayoutRenderer, Seek: SeekTarget, 
       const nextChildren = Array.isArray(children) ? children : [children];
 
       if (hasClass(classes.ColumnContainer))
-        return cloneElement(node, {
-          key: `${node.key || 'columns'}:with-external-news`
-        }, ...nextChildren);
+        return cloneElement(node, { key: `${node.key || 'columns'}:with-external-news` }, ...nextChildren);
 
       return children === node.props.children
         ? node

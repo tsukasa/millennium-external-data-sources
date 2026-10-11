@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { FeedManager } from '../../feed/manager';
-import { ConfigurationSectionSelector, type ConfigurationSection } from './section-selector';
+import { ConfigurationSectionSelector, sectionPanelClassName, type ConfigurationSection } from './section-selector';
 import { getPluginI18nString } from '../../i18n';
 import { PluginConfigurationFeed } from './feeds';
 import { usePluginStyles } from '../../hooks/use-plugin-styles';
@@ -19,7 +19,7 @@ export function PluginConfiguration({ feedManager }: PluginConfigurationProps) {
       <ConfigurationSectionSelector section={section} onChange={setSection} />
 
       <div className="MillenniumDesktopSidebar_EditorContent extdatasrc-plugin-settings-content">
-        <div className={`DialogBody extdatasrc-plugin-settings-panel${section === 'general' ? '' : ' extdatasrc-plugin-settings-panel-hidden'}`}>
+        <div className={sectionPanelClassName(section === 'general')}>
           {getPluginI18nString('configureFeedHint')}
         </div>
         <PluginConfigurationFeed feedManager={feedManager} visible={section === 'feeds'} />

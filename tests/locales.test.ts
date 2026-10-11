@@ -23,7 +23,8 @@ for (const file of files.filter(name => name !== 'english.json')) {
 }
 
 test('generated locales match their source files', async () => {
-  const locales = JSON.parse(await readFile(new URL('../resources/locales.json', import.meta.url), 'utf8')) as Record<string, Record<string, string>>;
+  const localesJson = await readFile(new URL('../resources/locales.json', import.meta.url), 'utf8');
+  const locales = JSON.parse(localesJson) as Record<string, Record<string, string>>;
   expect(Object.keys(locales).map(language => `${language}.json`).sort()).toEqual(files);
 
   for (const file of files) {

@@ -1,6 +1,7 @@
 import { decodeResponse } from '../transport';
 import { EXTERNAL_NEWS_DEFAULT_FETCH_INTERVAL } from '../constants';
 import { parseFeed } from './parser';
+import { notifyListeners } from '../listeners';
 import type { NewsItem, FeedResponse, FeedParseStats } from './types';
 
 interface CacheEntry {
@@ -12,35 +13,26 @@ interface CacheEntry {
 export class FeedCache {
   private entries = new Map<string, CacheEntry>();
   private pending = new Map<string, Promise<NewsItem[]>>();
-  private listeners = new Set<() => void>();
+  private listeners = new Set<(url: string) => void>();
   private ttlMs = EXTERNAL_NEWS_DEFAULT_FETCH_INTERVAL * 60_000;
 
-  setRefreshInterval(minutes: number) { this.ttlMs = minutes * 60_000; }
-
-  /**
-   */
   constructor(
     private fetcher: (appId: string) => Promise<string>,
     private now = Date.now,
     private onParsed?: (stats: FeedParseStats) => void,
   ) {}
 
-  /** Notifies consumers when a parsed feed replaces a cached entry. */
-  subscribe(listener: () => void) {
+  setRefreshInterval(minutes: number) {
+    this.ttlMs = minutes * 60_000;
+  }
+
+  /** Notifies consumers with the feed URL when a parsed feed replaces a cached entry. */
+  subscribe(listener: (url: string) => void) {
     this.listeners.add(listener);
 
     return () => {
       this.listeners.delete(listener);
     };
-  }
-
-  /** Returns only fresh cached items without starting a request. */
-  peek(url: string): NewsItem[] | undefined {
-    const entry = this.entries.get(url);
-
-    return entry && this.now() - entry.time < this.ttlMs
-      ? entry.items
-      : undefined;
   }
 
   /** Returns the last successful result, including after it expires for refetching. */
@@ -65,7 +57,8 @@ export class FeedCache {
 
   /** Removes all cached entries and pending requests. */
   clear() {
-    this.entries.clear(); this.pending.clear();
+    this.entries.clear();
+    this.pending.clear();
   }
 
   /**
@@ -99,7 +92,7 @@ export class FeedCache {
 
       if (this.pending.get(url) === request) {
         this.entries.set(url, { time: this.now(), items });
-        this.listeners.forEach(listener => listener());
+        notifyListeners(this.listeners, url);
       }
 
       return items;

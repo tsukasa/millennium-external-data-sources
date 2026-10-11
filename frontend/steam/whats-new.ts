@@ -19,7 +19,7 @@ interface AppNavigationOptions {
   gidPartnerEvent?: string;
 }
 
-export interface WhatsNewResult {
+interface WhatsNewResult {
   eventsToShow: NativeEventModel[];
   [key: string]: unknown;
 }
@@ -37,7 +37,7 @@ export interface WhatsNewStore {
   ResetUserAppPriorityForApp?(appId: number): Promise<unknown>;
 }
 
-export interface Navigator {
+interface Navigator {
   Home(options?: HomeNavigationOptions, ...args: unknown[]): unknown;
   App?(appId: number, options?: AppNavigationOptions, ...args: unknown[]): unknown;
 }
@@ -103,9 +103,9 @@ function installEventActionHooks(hooks: MethodHooks, store: WhatsNewStore, exter
 
     const url = externalEvents.articleUrl(gid);
 
-    if (url)
+    if (url) {
       void feedManager.addUrlToRemovedFeedItems(url);
-    else {
+    } else {
       externalEvents.hide(gid);
       refresh();
     }
@@ -126,8 +126,11 @@ function installEventActionHooks(hooks: MethodHooks, store: WhatsNewStore, exter
   }
 }
 
-/** Adds feed models to Steam's native What's New carousel without Steam service requests. */
-export function registerWhatsNew(feedManager: FeedManager, native: NativeBindings): () => void {
+/**
+ * Adds feed models to Steam's native What's New carousel without Steam service requests.
+ * Returns undefined while Steam's stores are not loaded yet.
+ */
+export function registerWhatsNew(feedManager: FeedManager, native: NativeBindings): (() => void) | undefined {
   const client = steam();
 
   const store = client.libraryEventStore;

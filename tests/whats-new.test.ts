@@ -1,13 +1,16 @@
 import { JSDOM } from 'jsdom';
 import { beforeEach, expect, test, setSystemTime } from 'bun:test';
 import { installBackend, FeedManager, registerWhatsNew, id, url, tick, runtime } from './helpers/ui-runtime';
+import type { NativeBindings } from '../frontend/steam/news-discovery';
 
 beforeEach(installBackend);
 
 function setupWhatsNew() {
   runtime.removed = [];
   const originalFetch = backend.fetchFeed;
-  backend.fetchFeed = async () => JSON.stringify({ url, xml: `<rss><channel><item><title>Fresh article</title><link>https://example.com/fresh</link><pubDate>${new Date().toUTCString()}</pubDate></item></channel></rss>` });
+  const freshFeed = () => '<rss><channel><item><title>Fresh article</title><link>https://example.com/fresh</link>'
+    + `<pubDate>${new Date().toUTCString()}</pubDate></item></channel></rss>`;
+  backend.fetchFeed = async () => JSON.stringify({ url, xml: freshFeed() });
   const feedManager = new FeedManager();
   feedManager.sources[id] = { url, showFeedInWhatsNew: true };
   class EventModel {
@@ -18,7 +21,9 @@ function setupWhatsNew() {
   class ActivityEvent {
     constructor(..._args: unknown[]) {}
   }
-  const nativeBindings = { EventModel, ActivityEvent, language: 0, imageQueryKey: ['image', 'probe'], probeGid: 'probe' } as unknown as import('../frontend/steam/news-discovery').NativeBindings;
+  const nativeBindings = {
+    EventModel, ActivityEvent, language: 0, imageQueryKey: ['image', 'probe'], probeGid: 'probe',
+  } as unknown as NativeBindings;
   const counters = { tracked: 0, navigated: 0, appNavigated: 0 };
   const priorityCalls: string[] = [];
   const now = Math.floor(Date.now() / 1000);
@@ -28,7 +33,9 @@ function setupWhatsNew() {
   ];
   const steamStore = {
     m_vecHomeBestEventsForUser: steamEvents,
-    GetWhatsNewEvents() { return { bEventsLoaded: true, eventsToShow: this.m_vecHomeBestEventsForUser, takeoverEvents: [] }; },
+    GetWhatsNewEvents() {
+      return { bEventsLoaded: true, eventsToShow: this.m_vecHomeBestEventsForUser, takeoverEvents: [] };
+    },
     TrackEventShownToUser(_event?: unknown) { counters.tracked++; },
     TrackEventClickedByUser(_event?: unknown) { counters.tracked++; },
     TrackEventShownToUserByGID(_gid: string) { counters.tracked++; },
@@ -38,7 +45,10 @@ function setupWhatsNew() {
     async LowerAppPriorityForApp(appId: number) { priorityCalls.push(`less:${appId}`); return true; },
     async ResetUserAppPriorityForApp(appId: number) { priorityCalls.push(`reset:${appId}`); return true; },
   };
-  const navigator = { Home(_event?: unknown) { counters.navigated++; }, App(_appId?: number, _options?: unknown) { counters.appNavigated++; } };
+  const navigator = {
+    Home(_event?: unknown) { counters.navigated++; },
+    App(_appId?: number, _options?: unknown) { counters.appNavigated++; },
+  };
   const navStore = { GetNavigator: () => navigator, SetNavigator(_navigator: { Home(): unknown }) {} };
   const settings = { clientSettings: { library_whats_new_show_only_product_updates: false } };
   const hero = '/customimages/game_hero.jpg';
@@ -64,7 +74,7 @@ function setupWhatsNew() {
   const originalApp = navigator.App;
   const originalRaise = steamStore.RaiseAppPriorityForApp;
   const originalLower = steamStore.LowerAppPriorityForApp;
-  const cleanup = registerWhatsNew(feedManager, nativeBindings);
+  const cleanup = registerWhatsNew(feedManager, nativeBindings)!;
   return {
     feedManager, nativeBindings, EventModel, steamEvents, steamStore, navigator, navStore,
     settings, hero, bpmDocument, laterBpmDocument, counters, priorityCalls, cleanup, originalFetch,
@@ -86,13 +96,16 @@ function setupWhatsNew() {
   };
 }
 
-async function withWhatsNew(check: (context: ReturnType<typeof setupWhatsNew>) => Promise<void>) {
-  const context = setupWhatsNew();
-  try {
-    await check(context);
-  } finally {
-    context.dispose();
-  }
+/** Declares a test that runs with a fresh What's New setup and disposes it afterwards. */
+function testWhatsNew(name: string, check: (context: ReturnType<typeof setupWhatsNew>) => Promise<void>) {
+  test(name, async () => {
+    const context = setupWhatsNew();
+    try {
+      await check(context);
+    } finally {
+      context.dispose();
+    }
+  });
 }
 
 function captureArticle(action: () => void): string | undefined {
@@ -110,7 +123,9 @@ function captureArticle(action: () => void): string | undefined {
   }
 }
 
-test("What's New uses native models, orders articles and styles both popup modes", () => withWhatsNew(async ({ feedManager, steamStore, EventModel, hero, bpmDocument, laterBpmDocument, popupCreated }) => {
+testWhatsNew("What's New uses native models, orders articles and styles both popup modes", async ({
+  feedManager, steamStore, EventModel, hero, bpmDocument, laterBpmDocument, popupCreated,
+}) => {
   expect(document.head.querySelector('style')?.textContent)
     .toContain('.EventRowCarousel img.PartnerEventRowCapsule_MainImage');
   expect(document.head.querySelector('style')?.textContent).toContain('object-fit: cover');
@@ -121,15 +136,18 @@ test("What's New uses native models, orders articles and styles both popup modes
   await feedManager.prefetchConfigured();
   const events = steamStore.GetWhatsNewEvents().eventsToShow;
   expect(events).toHaveLength(3);
-  expect(events.map(event => event.GID)).toEqual(['newer-steam-event', expect.stringContaining('external-news:'), 'older-steam-event']);
+  expect(events.map(event => event.GID))
+    .toEqual(['newer-steam-event', expect.stringContaining('external-news:'), 'older-steam-event']);
   expect(events[1]).toBeInstanceOf(EventModel);
   expect((events[1] as any).AnnouncementGID).toBe((events[1] as any).GID);
   expect((events[1] as any).name.get(0)).toBe('Fresh article');
   expect((events[1] as any).jsondata.localized_capsule_image[0]).toBe(new URL(hero, window.location.href).href);
   expect((events[1] as any).startTime).toBeGreaterThan(0);
-}));
+});
 
-test("What's New retains expired feeds, excludes old articles and respects visibility settings", () => withWhatsNew(async ({ feedManager, steamStore, originalFetch, steamEvents, settings, navigator, counters }) => {
+testWhatsNew("What's New retains expired feeds, excludes old articles and respects visibility settings", async ({
+  feedManager, steamStore, originalFetch, steamEvents, settings, navigator, counters,
+}) => {
   await feedManager.prefetchConfigured();
   const originalNow = Date.now;
   let extraFetches = 0;
@@ -139,7 +157,7 @@ test("What's New retains expired feeds, excludes old articles and respects visib
     await feedManager.prefetchConfigured();
     expect(extraFetches).toBe(0);
     setSystemTime(originalNow() + 601_000);
-    expect(feedManager.cache.peek(url)).toBeUndefined();
+    expect(feedManager.cache.refreshDelay(url)).toBe(0);
     expect(steamStore.GetWhatsNewEvents().eventsToShow).toHaveLength(3);
     setSystemTime(originalNow() + 31 * 24 * 60 * 60 * 1_000);
     expect(steamStore.GetWhatsNewEvents().eventsToShow).toHaveLength(2);
@@ -155,9 +173,11 @@ test("What's New retains expired feeds, excludes old articles and respects visib
   expect(steamStore.GetWhatsNewEvents().eventsToShow).toEqual(steamEvents);
   navigator.Home();
   expect(counters.navigated).toBe(1);
-}));
+});
 
-test("What's New suppresses external tracking and priority writes while preserving native actions", () => withWhatsNew(async ({ feedManager, steamStore, priorityCalls, counters }) => {
+testWhatsNew("What's New suppresses external tracking and priority writes while preserving native actions", async ({
+  feedManager, steamStore, priorityCalls, counters,
+}) => {
   await feedManager.prefetchConfigured();
   const events = steamStore.GetWhatsNewEvents().eventsToShow;
   steamStore.TrackEventShownToUser(events[1]);
@@ -177,9 +197,11 @@ test("What's New suppresses external tracking and priority writes while preservi
   steamStore.TrackEventShownToUserByGID('native-event');
   expect(counters.tracked).toBe(1);
   counters.tracked = 0;
-}));
+});
 
-test("What's New opens articles even after their feed is hidden from the carousel", () => withWhatsNew(async ({ feedManager, steamStore, navigator, counters }) => {
+testWhatsNew("What's New opens articles even after their feed is hidden from the carousel", async ({
+  feedManager, steamStore, navigator, counters,
+}) => {
   await feedManager.prefetchConfigured();
   const events = steamStore.GetWhatsNewEvents().eventsToShow;
   const opened = captureArticle(() => {
@@ -191,9 +213,11 @@ test("What's New opens articles even after their feed is hidden from the carouse
   expect(opened).toBe('https://example.com/fresh');
   expect(counters.navigated).toBe(0);
   expect(counters.appNavigated).toBe(0);
-}));
+});
 
-test("What's New persists removals, fills vacancies, applies item limits and opens capped articles", () => withWhatsNew(async ({ feedManager, steamStore, navigator, steamEvents, counters }) => {
+testWhatsNew("What's New persists removals, fills vacancies, applies item limits and opens capped articles", async ({
+  feedManager, steamStore, navigator, steamEvents, counters,
+}) => {
   await feedManager.prefetchConfigured();
   const events = steamStore.GetWhatsNewEvents().eventsToShow;
   steamStore.RemoveEvent((events[1] as any).GID);
@@ -228,11 +252,14 @@ test("What's New persists removals, fills vacancies, applies item limits and ope
 
   const cachedArticle = feedManager.cache.peekLast(url)?.find(item => item.url.endsWith('/article-7'));
   expect(cachedArticle).toBeDefined();
-  const opened = captureArticle(() => navigator.Home({ partnerEvent: { gid: `external-news:${id}:${cachedArticle!.gid}` } }));
+  const gid = `external-news:${id}:${cachedArticle!.gid}`;
+  const opened = captureArticle(() => navigator.Home({ partnerEvent: { gid } }));
   expect(opened).toBe('https://example.com/article-7');
-}));
+});
 
-test("What's New cleanup preserves later plugins' wrappers and stops intercepting navigation", () => withWhatsNew(async ({ feedManager, steamStore, navigator, navStore, settings, cleanup, nativeBindings, steamEvents, counters }) => {
+testWhatsNew("What's New cleanup preserves later plugins' wrappers and stops intercepting navigation", async ({
+  feedManager, steamStore, navigator, navStore, settings, cleanup, nativeBindings, steamEvents, counters,
+}) => {
   await feedManager.prefetchConfigured();
   const cachedArticle = feedManager.cache.peekLast(url)![0];
   cleanup();
@@ -244,7 +271,7 @@ test("What's New cleanup preserves later plugins' wrappers and stops interceptin
     App: navigator.App,
     SetNavigator: navStore.SetNavigator,
   };
-  const secondCleanup = registerWhatsNew(feedManager, nativeBindings);
+  const secondCleanup = registerWhatsNew(feedManager, nativeBindings)!;
   const innerEvents = steamStore.GetWhatsNewEvents;
   const innerRaise = steamStore.RaiseAppPriorityForApp;
   const innerHome = navigator.Home;
@@ -267,7 +294,8 @@ test("What's New cleanup preserves later plugins' wrappers and stops interceptin
     expect(navStore.SetNavigator).toBe(foreignSet);
     expect(steamStore.GetWhatsNewEvents().eventsToShow).toEqual(steamEvents);
     expect(await steamStore.RaiseAppPriorityForApp(Number(id))).toBe(true);
-    const beforeHome = counters.navigated, beforeApp = counters.appNavigated;
+    const beforeHome = counters.navigated;
+    const beforeApp = counters.appNavigated;
     navigator.Home({ partnerEvent: { gid: `external-news:${id}:${cachedArticle!.gid}` } });
     navigator.App(Number(id), { gidPartnerEvent: `external-news:${id}:${cachedArticle!.gid}` });
     expect(counters.navigated).toBe(beforeHome + 1);
@@ -278,11 +306,14 @@ test("What's New cleanup preserves later plugins' wrappers and stops interceptin
     expect(laterNavigator.Home).toBe(laterHome);
   } finally {
     secondCleanup();
-    Object.assign(steamStore, { GetWhatsNewEvents: originals.GetWhatsNewEvents, RaiseAppPriorityForApp: originals.RaiseAppPriorityForApp });
+    Object.assign(steamStore, {
+      GetWhatsNewEvents: originals.GetWhatsNewEvents,
+      RaiseAppPriorityForApp: originals.RaiseAppPriorityForApp,
+    });
     Object.assign(navigator, { Home: originals.Home, App: originals.App });
     navStore.SetNavigator = originals.SetNavigator;
   }
-}));
+});
 
 test('What\'s New installation failure removes partial hooks, popup subscriptions and styles', () => {
   const previousStore = (window as any).libraryEventStore;
@@ -311,7 +342,7 @@ test('What\'s New installation failure removes partial hooks, popup subscription
     },
   });
   try {
-    expect(() => registerWhatsNew(feedManager, {} as import('../frontend/steam/news-discovery').NativeBindings)).toThrow();
+    expect(() => registerWhatsNew(feedManager, {} as NativeBindings)).toThrow();
     for (const name of Object.keys(originals))
       expect((store as any)[name]).toBe((originals as any)[name]);
     expect(calls).toEqual(['subscribe', 'unsubscribe']);
@@ -323,4 +354,3 @@ test('What\'s New installation failure removes partial hooks, popup subscription
     feedManager.dispose();
   }
 });
-

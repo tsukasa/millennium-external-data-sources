@@ -1,10 +1,12 @@
 import { applyHookStubs, findModuleExport, removeHookStubs } from 'millennium';
-import type { ActivityComponent, NativeActivityProps, NativeEventModelConstructor, NativeActivityEventConstructor, QueryDataClient } from './news-types';
+import type {
+  ActivityComponent, NativeActivityProps, NativeEventModelConstructor, NativeActivityEventConstructor, QueryDataClient
+} from './news-types';
 import type { ComponentClass } from 'react';
 import { steam } from './client';
 import { MethodHooks } from './method-hooks';
 
-export interface NativeActivityComponentClass extends ComponentClass<NativeActivityProps> {
+interface NativeActivityComponentClass extends ComponentClass<NativeActivityProps> {
   prototype: ActivityComponent;
 }
 
@@ -22,8 +24,11 @@ export interface NativeBindings {
   language: number;
 }
 
+/** Steam has not loaded the modules yet; discovery can be retried cheaply. */
+export class NativeNewsUnavailableError extends Error {}
+
 /** Recursively search a React element tree for a node that matches the given predicate. */
-export function findElement(tree: any, predicate: (node: any) => boolean): any {
+function findElement(tree: any, predicate: (node: any) => boolean): any {
   if (Array.isArray(tree)) {
     for (const child of tree) {
       const found = findElement(child, predicate);
@@ -66,34 +71,36 @@ function render(element: any): any {
 /** Find Steam modules by behavior instead of build-specific names or IDs. */
 function findNativeModules() {
   /* Activity module */
-  const Activity = findModuleExport(value => typeof value === 'function' && String(value).includes('AppDetailsActivitySectionDays'));
+  const Activity = findModuleExport(value => typeof value === 'function'
+    && String(value).includes('AppDetailsActivitySectionDays'));
 
   if (!Activity)
-    throw new Error('Steam native news components are not available: Activity');
+    throw new NativeNewsUnavailableError('Steam native news components are not available: Activity');
 
   /* ActivityEvent module */
   const ActivityEvent = findModuleExport(value => value?.prototype?.IsEventLoaded && value?.prototype?.ReloadEvent);
 
   if (!ActivityEvent)
-    throw new Error('Steam native news components are not available: ActivityEvent');
+    throw new NativeNewsUnavailableError('Steam native news components are not available: ActivityEvent');
 
   /* EventModel module */
-  const EventModel = findModuleExport(value => value?.prototype?.GetSummaryWithFallback && value?.prototype?.GetNameWithFallback);
+  const EventModel = findModuleExport(value => value?.prototype?.GetSummaryWithFallback
+    && value?.prototype?.GetNameWithFallback);
 
   if (!EventModel)
-    throw new Error('Steam native news components are not available: EventModel');
+    throw new NativeNewsUnavailableError('Steam native news components are not available: EventModel');
 
   /* sharedClient module */
   const sharedClient = findModuleExport(value => value && typeof value.getQueryCache === 'function');
 
   if (!sharedClient)
-    throw new Error('Steam native news components are not available: sharedClient');
+    throw new NativeNewsUnavailableError('Steam native news components are not available: sharedClient');
 
   /* store */
   const store = steam().appActivityStore;
 
   if (!store)
-    throw new Error('Steam native news components are not available: store');
+    throw new NativeNewsUnavailableError('Steam native news components are not available: store');
 
   return { Activity, EventModel, ActivityEvent, sharedClient, store };
 }
@@ -134,17 +141,10 @@ function installProbeHookStubs(client: any): () => void {
   const context = new Proxy(client, {
     get(target, key) {
       if (key === 'location')
-        return {
-          state: {},
-          pathname: '/library/home'
-        };
+        return { state: {}, pathname: '/library/home' };
 
       if (key === 'history')
-        return {
-          location: {
-            state: {}
-          }
-        };
+        return { location: { state: {} } };
 
       return typeof target[key] === 'function'
         ? target[key].bind(target)

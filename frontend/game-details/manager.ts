@@ -1,4 +1,5 @@
-import { decodeResponse } from '../transport';
+import { backendWrite, decodeResponse } from '../transport';
+import { notifyListeners } from '../listeners';
 import { getPluginI18nString } from '../i18n';
 import { isCalendarDate, type CalendarDate } from './calendar-date';
 import type { StoreTag } from '../steam/store-tags';
@@ -12,7 +13,7 @@ export interface GameDetails {
 }
 
 export type GameDetailField = keyof GameDetails;
-export const GAME_DETAIL_FIELDS = [
+const GAME_DETAIL_FIELDS = [
   'releaseDate',
   'addedToLibraryDate',
   'developer',
@@ -100,8 +101,8 @@ export class GameDetailsManager {
     const normalized = normalizeGameDetail(field, value);
     const encoded = typeof normalized === 'string' ? normalized : JSON.stringify(normalized);
 
-    if (!await backend.setGameDetail(appId, field, encoded))
-      throw new Error(getPluginI18nString('couldNotSaveGameDetails'));
+    await backendWrite(() => backend.setGameDetail(appId, field, encoded),
+      getPluginI18nString('couldNotSaveGameDetails'));
 
     const details = { ...this.details[appId] };
 
@@ -119,8 +120,10 @@ export class GameDetailsManager {
   }
 
   async clear(appId: string): Promise<void> {
-    if (!await backend.clearGameDetails(appId))
-      throw new Error(getPluginI18nString('couldNotRemoveGameDetails'));
+    await backendWrite(() => backend.clearGameDetails(appId), getPluginI18nString('couldNotRemoveGameDetails'));
+
+    if (!Object.prototype.hasOwnProperty.call(this.details, appId))
+      return;
 
     delete this.details[appId];
     this.notify();
@@ -135,7 +138,7 @@ export class GameDetailsManager {
   }
 
   private notify(): void {
-    this.listeners.forEach(listener => listener());
+    notifyListeners(this.listeners);
   }
 
   dispose(): void {

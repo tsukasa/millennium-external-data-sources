@@ -62,14 +62,17 @@ test('activity store shares feed days without Steam requests and restores native
   const previousWindow = globalThis.window;
   Object.assign(globalThis, { window: { location: { href: 'https://steamloopback.host/' }, appActivityStore: store } });
   const sourceListeners = new Set<() => void>();
-  const cacheListeners = new Set<() => void>();
+  const cacheListeners = new Set<(url: string) => void>();
   let items = [item];
   const feedManager = {
     sources: { [appId]: { url, showFeedInWhatsNew: true } },
     subscribe(listener: () => void) { sourceListeners.add(listener); return () => sourceListeners.delete(listener); },
     cache: {
       peekLast: () => items,
-      subscribe(listener: () => void) { cacheListeners.add(listener); return () => cacheListeners.delete(listener); },
+      subscribe(listener: (url: string) => void) {
+        cacheListeners.add(listener);
+        return () => cacheListeners.delete(listener);
+      },
     },
   } as unknown as FeedManager;
   const native = {
@@ -90,8 +93,17 @@ test('activity store shares feed days without Steam requests and restores native
     expect(requests).toEqual([]);
 
     items = [];
-    cacheListeners.forEach(listener => listener());
+    cacheListeners.forEach(listener => listener(url));
     expect(store.GetAppActivity(appId)?.appActivityByDay).toHaveLength(0);
+    expect(requests).toEqual([]);
+
+    // Reads during a render must not write to Steam's store; the entry follows afterwards.
+    items = [item];
+    originalDelete(appId);
+    expect(store.GetAppActivity(appId)).toBeUndefined();
+    expect(map.has(appId)).toBe(false);
+    await Promise.resolve();
+    expect(store.GetAppActivity(appId)?.appActivityByDay).toHaveLength(1);
     expect(requests).toEqual([]);
     store.GetAppActivity(570);
     expect(requests).toEqual(['get:570']);
@@ -118,7 +130,7 @@ test('cold activity store publishes feed updates for several shortcuts', () => {
   };
   const previousWindow = globalThis.window;
   Object.assign(globalThis, { window: { location: { href: 'https://steamloopback.host/' }, appActivityStore: store } });
-  const cacheListeners = new Set<() => void>();
+  const cacheListeners = new Set<(url: string) => void>();
   let items: NewsItem[] | undefined;
   const otherId = 4066412614;
   const feedManager = {
@@ -126,7 +138,10 @@ test('cold activity store publishes feed updates for several shortcuts', () => {
     subscribe() { return () => {}; },
     cache: {
       peekLast: () => items,
-      subscribe(listener: () => void) { cacheListeners.add(listener); return () => cacheListeners.delete(listener); },
+      subscribe(listener: (url: string) => void) {
+        cacheListeners.add(listener);
+        return () => cacheListeners.delete(listener);
+      },
     },
   } as unknown as FeedManager;
   const native = {
@@ -139,7 +154,7 @@ test('cold activity store publishes feed updates for several shortcuts', () => {
     expect(map.get(otherId)?.m_mapActivityByDay).toBeDefined();
     expect(first.appActivityByDay).toHaveLength(0);
     items = [item];
-    cacheListeners.forEach(listener => listener());
+    cacheListeners.forEach(listener => listener(url));
     expect(map.get(appId)).not.toBe(first);
     expect(map.get(appId)?.appActivityByDay).toHaveLength(1);
     expect(map.get(otherId)?.appActivityByDay).toHaveLength(1);
@@ -149,7 +164,7 @@ test('cold activity store publishes feed updates for several shortcuts', () => {
       { ...item, gid: 'previous-year', date: new Date(2025, 8, 28, 12).getTime() / 1000 },
       { ...item, gid: 'undated', date: null },
     ];
-    cacheListeners.forEach(listener => listener());
+    cacheListeners.forEach(listener => listener(url));
     const days = map.get(appId).appActivityByDay;
     expect(days).toHaveLength(3);
     expect(days.map((day: any) => day.events[0].externalNewsItem.gid))
@@ -178,7 +193,10 @@ test('activity cleanup preserves foreign entries and later method wrappers', asy
   Object.assign(globalThis, { window: { appActivityStore: store } });
   const listeners = new Set<() => void>();
   const otherId = appId + 1;
-  const sources: Record<string, FeedSourceSettings> = { [appId]: { url, showFeedInWhatsNew: true }, [otherId]: { url, showFeedInWhatsNew: true } };
+  const sources: Record<string, FeedSourceSettings> = {
+    [appId]: { url, showFeedInWhatsNew: true },
+    [otherId]: { url, showFeedInWhatsNew: true },
+  };
   const feedManager = {
     sources,
     subscribe() { return () => {}; },
@@ -232,7 +250,6 @@ test('activity cleanup preserves foreign entries and later method wrappers', asy
   }
 });
 
-
 test('activity installation failure restores hooks, subscriptions and partial feed entries', () => {
   const previousWindow = globalThis.window;
   const map = new Map<number, Activity>();
@@ -247,7 +264,7 @@ test('activity installation failure restores hooks, subscriptions and partial fe
   };
   const originals = { ...store };
   const sourceListeners = new Set<() => void>();
-  const cacheListeners = new Set<() => void>();
+  const cacheListeners = new Set<(url: string) => void>();
   let broken = true;
   class FailingModel extends EventModel {
     static GenerateSummaryFromText(value: string) {
@@ -260,7 +277,10 @@ test('activity installation failure restores hooks, subscriptions and partial fe
     subscribe(listener: () => void) { sourceListeners.add(listener); return () => sourceListeners.delete(listener); },
     cache: {
       peekLast: () => [item],
-      subscribe(listener: () => void) { cacheListeners.add(listener); return () => cacheListeners.delete(listener); },
+      subscribe(listener: (url: string) => void) {
+        cacheListeners.add(listener);
+        return () => cacheListeners.delete(listener);
+      },
     },
   } as unknown as FeedManager;
   const native = {
@@ -281,6 +301,56 @@ test('activity installation failure restores hooks, subscriptions and partial fe
     cleanup();
     expect(map.size).toBe(0);
   } finally {
+    Object.assign(globalThis, { window: previousWindow });
+  }
+});
+
+test('activity sync rebuilds only apps whose feed items changed', () => {
+  const map = new Map<number, any>();
+  const store = {
+    m_mapAppActivity: map,
+    GetAppActivity: (id: number) => map.get(id),
+    RequestRestoreActivity() {}, async RestoreActivity() {}, FetchLatestActivity() {},
+    async FetchLatestActivityFromServer() {}, async FetchActivityHistory() {},
+  };
+  const previousWindow = globalThis.window;
+  Object.assign(globalThis, { window: { location: { href: 'https://steamloopback.host/' }, appActivityStore: store } });
+  const otherId = 4066412614;
+  const otherUrl = 'https://other.test/feed';
+  const managerListeners = new Set<() => void>();
+  const cacheListeners = new Set<(url: string) => void>();
+  const items = new Map<string, NewsItem[]>([[url, [item]], [otherUrl, [{ ...item, gid: 'other' }]]]);
+  const feedManager = {
+    sources: { [appId]: { url, showFeedInWhatsNew: true }, [otherId]: { url: otherUrl, showFeedInWhatsNew: true } },
+    subscribe(listener: () => void) { managerListeners.add(listener); return () => managerListeners.delete(listener); },
+    cache: {
+      peekLast: (feed: string) => items.get(feed),
+      subscribe(listener: (url: string) => void) {
+        cacheListeners.add(listener);
+        return () => cacheListeners.delete(listener);
+      },
+    },
+  } as unknown as FeedManager;
+  const built: string[] = [];
+  const native = {
+    EventModel, ActivityEvent, language: 0, imageQueryKey: ['image', 'probe'], probeGid: 'probe',
+    sharedClient: { setQueryData(key: unknown[]) { if (key[0] === 'image') built.push(String(key[1])); } },
+  } as unknown as NativeBindings;
+  const dispose = registerActivityStore(feedManager, native);
+  try {
+    expect(built).toEqual([`external-news:${appId}:article-1`, `external-news:${otherId}:other`]);
+    built.length = 0;
+
+    managerListeners.forEach(listener => listener());
+    cacheListeners.forEach(listener => listener(url));
+    expect(built).toEqual([]);
+
+    items.set(otherUrl, [{ ...item, gid: 'fresh' }]);
+    cacheListeners.forEach(listener => listener(otherUrl));
+    expect(built).toEqual([`external-news:${otherId}:fresh`]);
+    expect(map.get(appId).appActivityByDay[0].events[0].externalNewsItem.gid).toBe('article-1');
+  } finally {
+    dispose();
     Object.assign(globalThis, { window: previousWindow });
   }
 });

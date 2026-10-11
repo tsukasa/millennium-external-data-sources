@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import {
   EXTERNAL_NEWS_MIN_FETCH_INTERVAL, EXTERNAL_NEWS_MAX_FETCH_INTERVAL,
   EXTERNAL_NEWS_MIN_CONCURRENT_FETCHES, EXTERNAL_NEWS_MAX_CONCURRENT_FETCHES,
-  EXTERNAL_NEWS_MAX_ITEMS, EXTERNAL_NEWS_DEFAULT_MAX_ITEMS,
+  EXTERNAL_NEWS_MAX_ITEMS, EXTERNAL_NEWS_DEFAULT_MAX_ITEMS, EXTERNAL_NEWS_MAX_AGE,
 } from '../frontend/constants';
 
 test('frontend and Lua agree on persisted feed setting limits and defaults', async () => {
@@ -15,4 +15,5 @@ test('frontend and Lua agree on persisted feed setting limits and defaults', asy
   expect(constants.get('FEED_CONCURRENCY_MAX')).toBe(EXTERNAL_NEWS_MAX_CONCURRENT_FETCHES);
   expect(constants.get('FEED_ITEMS_MAX')).toBe(EXTERNAL_NEWS_MAX_ITEMS);
   expect(constants.get('FEED_ITEMS_DEFAULT')).toBe(EXTERNAL_NEWS_DEFAULT_MAX_ITEMS);
+  expect(constants.get('FEED_REMOVED_ITEM_MAX_AGE')).toBe(EXTERNAL_NEWS_MAX_AGE);
 });

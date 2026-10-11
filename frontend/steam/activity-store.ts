@@ -4,6 +4,10 @@ import { MethodHooks } from './method-hooks';
 import type { NativeBindings } from './news-discovery';
 import { isNonSteamId, steam } from './client';
 import type { FeedManager } from '../feed/manager';
+import type { NewsItem } from '../feed';
+
+/** Shared empty result so uncached feeds compare equal between syncs. */
+const NO_ITEMS: NewsItem[] = [];
 
 /** Determine if an activity event is external (i.e., has an associated external news item). */
 const isExternal = (event: NativeActivityEvent) => !!event?.externalNewsItem;
@@ -88,11 +92,10 @@ function removeExternal(activity: NativeAppActivity): void {
   for (const [time, day] of activity.m_mapActivityByDay || []) {
     if (!(day.m_rgEvents || day.events)?.some(isExternal))
       continue;
-    if (day.m_rgEvents?.replace && day.m_rgEvents.some(isExternal)) {
+    if (day.m_rgEvents?.replace && day.m_rgEvents.some(isExternal))
       day.m_rgEvents.replace(day.m_rgEvents.filter((event: NativeActivityEvent) => !isExternal(event)));
-    } else if (Array.isArray(day.events) && day.events.some(isExternal)) {
+    else if (Array.isArray(day.events) && day.events.some(isExternal))
       day.events.splice(0, day.events.length, ...day.events.filter((event: NativeActivityEvent) => !isExternal(event)));
-    }
 
     if (!day.BHasEvents())
       activity.m_mapActivityByDay.delete(time);
@@ -128,6 +131,8 @@ export function registerActivityStore(feedManager: FeedManager, native: NativeBi
 
   const owned = new Map<number, NativeAppActivity>();
   const touched = new Set<number>();
+  // Activity and parsed items last written per app; unchanged pairs need no rebuild.
+  const synced = new Map<number, { activity: NativeAppActivity; items: NewsItem[] }>();
   let disposed = false;
 
   const configured = (appId: number) => isNonSteamId(appId) && !!feedManager.sources[String(appId)]?.url;
@@ -154,9 +159,17 @@ export function registerActivityStore(feedManager: FeedManager, native: NativeBi
       owned.delete(appId);
 
       touched.delete(appId);
+      synced.delete(appId);
 
       return;
     }
+
+    const url = feedManager.sources[String(appId)].url;
+    const items = feedManager.cache.peekLast(url) || NO_ITEMS;
+    const last = synced.get(appId);
+
+    if (old && last?.activity === old && last.items === items)
+      return;
 
     // A plain fallback has no MobX-observable day map. Publish a fresh value
     // when the cache changes so both library UIs render the new days.
@@ -170,27 +183,28 @@ export function registerActivityStore(feedManager: FeedManager, native: NativeBi
 
     removeExternal(activity);
 
-    const url = feedManager.sources[String(appId)].url;
-    const items = feedManager.cache.peekLast(url) || [];
-    const events = createExternalNewsEvents(native, String(appId), items, native.sharedClient);
+    const events = createExternalNewsEvents(native, String(appId), items);
 
     addEventsToDays(store, activity, events);
 
     store.m_mapAppActivity.set(appId, activity);
+    synced.set(appId, { activity, items });
   };
 
   const syncAll = () => {
-    const ids = new Set([
-      ...touched,
-      ...Object
-        .keys(feedManager.sources)
-        .map(Number)
-    ]);
+    const ids = new Set([...touched, ...Object.keys(feedManager.sources).map(Number)]);
 
     for (const id of ids) {
-      if (isNonSteamId(id)) {
+      if (isNonSteamId(id))
         sync(id);
-      }
+    }
+  };
+
+  /** Rebuilds only the apps that use a refreshed feed URL. */
+  const syncFeed = (url: string) => {
+    for (const [id, source] of Object.entries(feedManager.sources)) {
+      if (source.url === url && isNonSteamId(Number(id)))
+        sync(Number(id));
     }
   };
 
@@ -215,6 +229,7 @@ export function registerActivityStore(feedManager: FeedManager, native: NativeBi
 
     owned.clear();
     touched.clear();
+    synced.clear();
   };
 
   try {
@@ -222,8 +237,10 @@ export function registerActivityStore(feedManager: FeedManager, native: NativeBi
       if (!configured(appId))
         return original();
 
+      // Steam reads activity during renders. Publish missing activity afterwards
+      // so the read path has no side effects; the observable map updates readers.
       if (!instance.m_mapAppActivity.has(appId))
-        sync(appId);
+        queueMicrotask(() => sync(appId));
 
       return instance.m_mapAppActivity.get(appId);
     });
@@ -239,7 +256,7 @@ export function registerActivityStore(feedManager: FeedManager, native: NativeBi
     }
 
     unsubscribeFeedManager = feedManager.subscribe(syncAll);
-    unsubscribeCache = feedManager.cache.subscribe(syncAll);
+    unsubscribeCache = feedManager.cache.subscribe(syncFeed);
     syncAll();
 
     return cleanup;

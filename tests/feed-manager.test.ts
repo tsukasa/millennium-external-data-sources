@@ -3,6 +3,44 @@ import { installBackend, FeedManager, id, otherId, url, tick, runtime } from './
 
 beforeEach(installBackend);
 
+test('shared feed cache survives another game joining, switching URLs or clearing its source', async () => {
+  const feedManager = new FeedManager();
+  const originalFetch = backend.fetchFeed;
+  let requests = 0;
+  backend.fetchFeed = async appId => {
+    requests++;
+    return JSON.stringify({ url: runtime.saved[appId], xml: '<rss><channel><item><title>Update</title><link>https://example.com/update</link></item></channel></rss>' });
+  };
+  try {
+    await feedManager.save(id, url);
+    const items = await feedManager.cache.get(id, url);
+    expect(items).toHaveLength(1);
+
+    await feedManager.save(otherId, url);
+    expect(feedManager.cache.peekLast(url)).toBe(items);
+    expect(requests).toBe(1);
+
+    const newUrl = 'https://other.test/rss';
+    await feedManager.save(id, newUrl);
+    expect(feedManager.sources[otherId]?.url).toBe(url);
+    expect(feedManager.cache.peekLast(url)).toBe(items);
+    await feedManager.cache.get(id, newUrl);
+
+    await feedManager.save(id, url);
+    expect(feedManager.cache.peekLast(newUrl)).toBeUndefined();
+    expect(feedManager.cache.peekLast(url)).toBe(items);
+    expect(requests).toBe(2);
+
+    await feedManager.clear(id);
+    expect(feedManager.cache.peekLast(url)).toBe(items);
+    await feedManager.clear(otherId);
+    expect(feedManager.cache.peekLast(url)).toBeUndefined();
+  } finally {
+    backend.fetchFeed = originalFetch;
+    feedManager.dispose();
+  }
+});
+
 test('settings without a URL survive loading and never start a feed request', async () => {
   runtime.shown = { [id]: false };
   runtime.maxed = { [id]: 5 };
@@ -42,7 +80,7 @@ test('persistent feed settings stay separate by AppID and failed writes retain p
   await feedManager.setMaxItemsFromFeedInWhatsNew(id, 5);
   const limitRestart = new FeedManager(); await limitRestart.load();
   expect(limitRestart.sources[id]?.maxItemsFromFeedInWhatsNew).toBe(5);
-  await expect(feedManager.save(id, 'https://fail.test/')).rejects.toThrow('disk error');
+  await expect(feedManager.save(id, 'https://fail.test/')).rejects.toThrow('Could not save feed source.');
   expect(feedManager.sources[id]?.url).toBe(url);
   expect(feedManager.sources[id]?.showFeedInWhatsNew).toBe(false);
   await feedManager.clear(id); expect(runtime.saved[id]).toBeUndefined(); expect(runtime.saved[otherId]).toBeDefined();
@@ -51,7 +89,6 @@ test('persistent feed settings stay separate by AppID and failed writes retain p
   expect(runtime.removed).toEqual(['https://example.com/article']);
   feedManager.dispose(); restart.dispose(); limitRestart.dispose(); removalRestart.dispose();
 });
-
 
 test('failed removal writes restore the card and leave saved URLs untouched', async () => {
   runtime.removed = [];
@@ -75,7 +112,6 @@ test('failed removal writes restore the card and leave saved URLs untouched', as
   }
 });
 
-
 test('background prefetch shares the feed request with an opened game', async () => {
   const original = backend.fetchFeed;
   let requests = 0;
@@ -98,7 +134,6 @@ test('background prefetch shares the feed request with an opened game', async ()
     feedManager.dispose();
   }
 });
-
 
 test('background refresh starts once and fetches at most two feeds concurrently', async () => {
   const original = backend.fetchFeed;
@@ -134,7 +169,6 @@ test('background refresh starts once and fetches at most two feeds concurrently'
   }
 });
 
-
 test('background refresh follows cache expiry after a nonzero fetch duration', async () => {
   const originalFetch = backend.fetchFeed;
   const originalSetTimeout = globalThis.setTimeout;
@@ -162,7 +196,7 @@ test('background refresh follows cache expiry after a nonzero fetch duration', a
     expect(delayMs).toBe(600_000);
     expect(now).toBe(1_000);
     expect(requests).toBe(1);
-    expect(feedManager.cache.peek(url)?.[0].title).toBe('Update 1');
+    expect(feedManager.cache.peekLast(url)?.[0].title).toBe('Update 1');
 
     now = 600_000;
     await feedManager.prefetchConfigured();
@@ -172,7 +206,7 @@ test('background refresh follows cache expiry after a nonzero fetch duration', a
     runTimer();
     await feedManager.prefetchConfigured();
     expect(requests).toBe(2);
-    expect(feedManager.cache.peek(url)?.[0].title).toBe('Update 2');
+    expect(feedManager.cache.peekLast(url)?.[0].title).toBe('Update 2');
   } finally {
     feedManager.dispose();
     backend.fetchFeed = originalFetch;
@@ -238,12 +272,12 @@ test('queued feeds refresh at the earliest expiry and failed refreshes retain th
     runTimer();
     await feedManager.prefetchConfigured();
     expect(requests).toHaveLength(5);
-    expect(feedManager.cache.peek(url)).toBeDefined();
+    expect(feedManager.cache.refreshDelay(url)).toBeGreaterThan(0);
     now += delay;
     runTimer();
     await feedManager.prefetchConfigured();
     expect(requests).toHaveLength(6);
-    expect(feedManager.cache.peek(`${url}/other`)).toBeDefined();
+    expect(feedManager.cache.refreshDelay(`${url}/other`)).toBeGreaterThan(0);
   } finally {
     feedManager.dispose();
     backend.fetchFeed = originalFetch;
@@ -283,7 +317,6 @@ test('disposing during the first background request does not create a refresh ti
   }
 });
 
-
 test('global feed settings persist and update the active refresh timer and cache', async () => {
   const originalSetTimeout = globalThis.setTimeout;
   const originalClearTimeout = globalThis.clearTimeout;
@@ -317,15 +350,15 @@ test('global feed settings persist and update the active refresh timer and cache
     expect(delays).toEqual([600_000, 900_000]);
     expect(cleared).toContain(1);
     now = 600_000;
-    expect(feedManager.cache.peek(url)).toBeDefined();
+    expect(feedManager.cache.refreshDelay(url)).toBeGreaterThan(0);
     now = 900_000;
-    expect(feedManager.cache.peek(url)).toBeUndefined();
+    expect(feedManager.cache.refreshDelay(url)).toBe(0);
 
     const restarted = new FeedManager();
     await restarted.load();
     expect([restarted.refreshIntervalMinutes, restarted.concurrentFetches]).toEqual([15, 3]);
     restarted.dispose();
-    await expect(feedManager.setPluginFeedSettings(9, 3)).rejects.toThrow();
+    await expect(feedManager.setPluginFeedSettings(9, 3)).rejects.toThrow('Could not save feed settings.');
     expect(runtime.globalFeedSettings.refreshIntervalMinutes).toBe(15);
   } finally {
     feedManager.dispose();
@@ -336,7 +369,6 @@ test('global feed settings persist and update the active refresh timer and cache
     runtime.globalFeedSettings = originalSettings;
   }
 });
-
 
 test('configured worker count limits simultaneous background fetches', async () => {
   const originalFetch = backend.fetchFeed;
@@ -404,3 +436,28 @@ test('overlapping background refreshes reuse one worker group', async () => {
   }
 });
 
+test('a failing subscriber neither rejects completed writes nor starves other subscribers', async () => {
+  const feedManager = new FeedManager();
+  const originalFetch = backend.fetchFeed;
+  const originalError = console.error;
+  const notified: string[] = [];
+  backend.fetchFeed = async appId => JSON.stringify({ url: runtime.saved[appId], xml: '<rss><channel><item><title>Update</title><link>https://example.com/update</link></item></channel></rss>' });
+  console.error = () => {};
+  feedManager.subscribe(() => { throw new Error('Steam store changed'); });
+  feedManager.subscribe(() => notified.push('manager'));
+  feedManager.cache.subscribe(() => { throw new Error('Steam store changed'); });
+  feedManager.cache.subscribe(changed => notified.push(changed));
+  try {
+    await feedManager.save(id, url);
+    expect(runtime.saved[id]).toBe(url);
+    expect(notified).toContain('manager');
+
+    await expect(feedManager.cache.get(id, url)).resolves.toHaveLength(1);
+    expect(notified).toContain(url);
+    expect(feedManager.cache.peekLast(url)).toHaveLength(1);
+  } finally {
+    backend.fetchFeed = originalFetch;
+    console.error = originalError;
+    feedManager.dispose();
+  }
+});

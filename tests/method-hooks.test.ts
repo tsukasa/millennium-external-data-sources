@@ -54,3 +54,69 @@ test('non-configurable observable accessors retain their setters and original fu
   expect(value).toBe(original);
   expect((target as any).method()).toBe(5);
 });
+
+/** Steam's `@bind` decorator: a lazy prototype getter that installs a bound copy per instance. */
+function bindDecorated<T extends object>(prototype: T, name: string, method: (this: any, ...args: any[]) => unknown) {
+  Object.defineProperty(prototype, name, {
+    configurable: true,
+    get() {
+      const bound = method.bind(this);
+      if (!Object.prototype.hasOwnProperty.call(this, name))
+        Object.defineProperty(this, name, { value: bound });
+      return bound;
+    },
+  });
+}
+
+test('bind-decorated methods stay bound when passed detached', () => {
+  class Card { declare OnClick: (amount: number) => number; value = 2; }
+  bindDecorated(Card.prototype, 'OnClick', function (this: Card, amount: number) { return this.value * amount; });
+  const descriptor = Object.getOwnPropertyDescriptor(Card.prototype, 'OnClick');
+  const hooks = new MethodHooks();
+  const receivers: Card[] = [];
+  hooks.wrap(Card.prototype, 'OnClick', (original, instance) => {
+    receivers.push(instance);
+    return original() + 1;
+  });
+
+  const card = new Card();
+  const detached = card.OnClick;
+  expect(detached(3)).toBe(7);
+  expect(card.OnClick).toBe(detached);
+  // Calling the native getter must not install its bound original over the hook.
+  expect(card.OnClick(3)).toBe(7);
+  expect(receivers).toEqual([card, card]);
+
+  hooks.restore();
+  expect(Object.getOwnPropertyDescriptor(Card.prototype, 'OnClick')).toEqual(descriptor);
+  expect(detached(3)).toBe(6);
+  const fresh = new Card();
+  const freshDetached = fresh.OnClick;
+  expect(freshDetached(3)).toBe(6);
+});
+
+test('instances bound before the hook keep their native method', () => {
+  class Card { declare OnClick: () => number; value = 2; }
+  bindDecorated(Card.prototype, 'OnClick', function (this: Card) { return this.value; });
+  const early = new Card();
+  void early.OnClick;
+  const hooks = new MethodHooks();
+  hooks.wrap(Card.prototype, 'OnClick', original => original() + 1);
+  const late = new Card();
+  const detached = late.OnClick;
+  expect(early.OnClick()).toBe(2);
+  expect(detached()).toBe(3);
+  hooks.restore();
+});
+
+test('later wrappers can assign over a bind-decorated hook', () => {
+  class Card { declare OnClick: () => number; value = 2; }
+  bindDecorated(Card.prototype, 'OnClick', function (this: Card) { return this.value; });
+  const hooks = new MethodHooks();
+  hooks.wrap(Card.prototype, 'OnClick', original => original() * 10);
+  const inner = Card.prototype.OnClick;
+  Card.prototype.OnClick = function (this: Card) { return inner.call(this) + 1; };
+  expect(new Card().OnClick()).toBe(21);
+  hooks.restore();
+  expect(new Card().OnClick()).toBe(3);
+});

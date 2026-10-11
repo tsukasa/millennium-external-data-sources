@@ -3,6 +3,13 @@ import { getPluginI18nString } from '../../i18n';
 
 export type ConfigurationSection = 'general' | 'feeds';
 
+/** Class names of a section panel; inactive panels stay mounted but hidden. */
+export function sectionPanelClassName(visible: boolean): string {
+  return visible
+    ? 'DialogBody extdatasrc-plugin-settings-panel'
+    : 'DialogBody extdatasrc-plugin-settings-panel extdatasrc-plugin-settings-panel-hidden';
+}
+
 /** Section selector, similar to how Millennium's theme editor header works. */
 interface ConfigurationSectionSelectorProps {
   section: ConfigurationSection;

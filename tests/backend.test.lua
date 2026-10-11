@@ -137,7 +137,8 @@ assert(not pcall(clearGameDetails, id))
 assert(config[id].publisher[1] == "Publisher")
 failWrites = false
 assert(clearGameDetails(id))
-assert(config[id].addedToLibraryDate == nil and config[id].publisher == nil and config[id].tags == nil and config[id].feed ~= nil)
+assert(config[id].addedToLibraryDate == nil and config[id].publisher == nil and config[id].tags == nil)
+assert(config[id].feed ~= nil)
 assert(clearFeedSource(id) and config[id] == nil)
 config[other].addedToLibrary = "2024-02-29"
 assert(getGameDetails()[other] == nil) -- The old key is ignored, not converted.
@@ -145,4 +146,42 @@ assert(not pcall(setGameDetail, other, "addedToLibrary", "2024-02-29"))
 assert(setGameDetail(other, "addedToLibraryDate", "2026-02-13"))
 assert(getGameDetails()[other].addedToLibraryDate == "2026-02-13")
 assert(config[other].addedToLibrary == "2024-02-29")
-print("Backend regressions passed: ISO dates, game details, field preservation, deletion and write failures")
+-- Feed bodies above the size limit never reach the UI thread.
+local http = require("http")
+local originalGet = http.get
+config[id] = { feed = "https://example.com/feed" }
+http.get = function() return { status = 200, body = string.rep("x", 5242881) } end
+local tooLargeOk, tooLargeErr = pcall(fetchFeed, id)
+assert(not tooLargeOk and tostring(tooLargeErr):find("too large", 1, true))
+http.get = function() return { status = 200, body = "<rss/>" } end
+assert(fetchFeed(id).xml == "<rss/>")
+http.get = originalGet
+config[id] = nil
+
+-- Clearing without stored details is a no-op and never writes.
+config[id] = { feed = "https://example.com/feed" }
+failWrites = true
+assert(clearGameDetails(id) and config[id].feed == "https://example.com/feed")
+failWrites = false
+config[id] = nil
+
+-- Removed What's New articles expire with the What's New age limit; legacy URLs migrate.
+local now = os.time()
+config.feedRemovedItems = {
+    "https://example.com/legacy",
+    { url = "https://example.com/recent", removedAt = now - 60 },
+    { url = "https://example.com/expired", removedAt = now - 2592001 },
+    { url = 42 },
+}
+local removed = getFeedRemovedItems()
+assert(#removed == 2 and removed[1] == "https://example.com/legacy" and removed[2] == "https://example.com/recent")
+assert(#config.feedRemovedItems == 2 and type(config.feedRemovedItems[1].removedAt) == "number")
+assert(addFeedRemovedItem("https://example.com/recent") and #config.feedRemovedItems == 2)
+assert(addFeedRemovedItem("https://example.com/new") and #config.feedRemovedItems == 3)
+assert(config.feedRemovedItems[3].url == "https://example.com/new")
+assert(not pcall(addFeedRemovedItem, "javascript:alert(1)"))
+config.feedRemovedItems = nil
+assert(#getFeedRemovedItems() == 0 and config.feedRemovedItems == nil)
+
+print("Backend regressions passed: ISO dates, game details, field preservation, deletion, write failures, "
+    .. "feed size and removed items")

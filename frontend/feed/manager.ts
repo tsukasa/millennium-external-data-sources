@@ -1,6 +1,7 @@
 import { FeedCache, httpUrl } from './index';
 import { getPluginI18nString } from '../i18n';
-import { decodeResponse } from '../transport';
+import { backendWrite, decodeResponse } from '../transport';
+import { notifyListeners } from '../listeners';
 import {
   EXTERNAL_NEWS_DEFAULT_MAX_ITEMS, EXTERNAL_NEWS_MAX_ITEMS, EXTERNAL_NEWS_MAX_FETCH_INTERVAL,
   EXTERNAL_NEWS_MIN_FETCH_INTERVAL, EXTERNAL_NEWS_MIN_CONCURRENT_FETCHES,
@@ -30,7 +31,11 @@ export class FeedManager {
   });
 
   load(): Promise<void> {
-    return this.loading ||= Promise.all([backend.getFeedSources(), backend.getFeedRemovedItems(), backend.getFeedSettings()]).then(([feedSources, removedFeedItemsList, globalFeedSettings]) => {
+    return this.loading ||= Promise.all([
+      backend.getFeedSources(),
+      backend.getFeedRemovedItems(),
+      backend.getFeedSettings(),
+    ]).then(([feedSources, removedFeedItemsList, globalFeedSettings]) => {
       const settings = decodeResponse<FeedSourceSettingsByAppId>(feedSources) || {};
 
       const removedItems = decodeResponse<unknown>(removedFeedItemsList);
@@ -98,10 +103,10 @@ export class FeedManager {
     const valid = FeedManager.isValidGlobalFeedIntervalValue(intervalMinutes)
       && FeedManager.isValidGlobalFeedConcurrencyValue(concurrentFetches);
     if (!valid)
-      throw new Error(getPluginI18nString('couldNotSaveFeedSource'));
+      throw new Error(getPluginI18nString('couldNotSaveFeedSettings'));
 
-    if (!await backend.setFeedSettings(intervalMinutes, concurrentFetches))
-      throw new Error(getPluginI18nString('couldNotSaveFeedSource'));
+    await backendWrite(() => backend.setFeedSettings(intervalMinutes, concurrentFetches),
+      getPluginI18nString('couldNotSaveFeedSettings'));
 
     this.refreshIntervalMinutes = intervalMinutes;
     this.concurrentFetches = concurrentFetches;
@@ -109,9 +114,8 @@ export class FeedManager {
     this.cache.setRefreshInterval(intervalMinutes);
 
     // Restart the timer for background refresh.
-    if (this.backgroundRefreshStarted) {
+    if (this.backgroundRefreshStarted)
       this.startRefreshTimer();
-    }
 
     this.notify();
   }
@@ -202,29 +206,30 @@ export class FeedManager {
   /** Notifies all subscribed listeners about a state change. */
   private notify() {
     this.revision++;
-    this.listeners.forEach(listener => listener());
+    notifyListeners(this.listeners);
   }
 
   /** Saves/updates all feed settings for a specific AppID. */
-  async save(id: string, value: string, showInWhatsNew = this.sources[id]?.showFeedInWhatsNew !== false, maxItemsFromFeedInWhatsNew = this.sources[id]?.maxItemsFromFeedInWhatsNew ?? EXTERNAL_NEWS_DEFAULT_MAX_ITEMS) {
+  async save(id: string, value: string,
+    showInWhatsNew = this.sources[id]?.showFeedInWhatsNew !== false,
+    maxItemsFromFeedInWhatsNew = this.sources[id]?.maxItemsFromFeedInWhatsNew ?? EXTERNAL_NEWS_DEFAULT_MAX_ITEMS) {
     const url = httpUrl(value.trim());
 
     if (!url)
       throw new Error(getPluginI18nString('enterFeedUrl'));
 
-    if (!await backend.saveFeedSource(id, url, showInWhatsNew, maxItemsFromFeedInWhatsNew))
-      throw new Error(getPluginI18nString('couldNotSaveFeedSource'));
+    await backendWrite(() => backend.saveFeedSource(id, url, showInWhatsNew, maxItemsFromFeedInWhatsNew),
+      getPluginI18nString('couldNotSaveFeedSource'));
 
     const previousUrl = this.sources[id]?.url;
     const urlChanged = previousUrl !== url;
 
     if (urlChanged) {
       // Phase out the previous feed URL from the cache and failed refreshes.
-      if (previousUrl) {
-        this.invalidateFeed(previousUrl);
-      }
+      if (previousUrl)
+        this.invalidateFeed(previousUrl, id);
 
-      this.invalidateFeed(url);
+      this.invalidateFeed(url, id);
     }
 
     this.sources[id] = {
@@ -241,21 +246,25 @@ export class FeedManager {
       void this.cache.get(id, url).catch(() => {});
   }
 
-  private invalidateFeed(url: string): void {
+  private invalidateFeed(url: string, appId: string): void {
+    if (Object.entries(this.sources).some(([id, source]) => id !== appId && source.url === url))
+      return;
+
     this.cache.invalidate(url);
     this.failedRefreshes.delete(url);
   }
 
   /** Clears the feed source for a specific feed identified by its AppID. */
   async clear(appId: string) {
-    if (!await backend.clearFeedSource(appId))
-      throw new Error(getPluginI18nString('couldNotRemoveFeedSource'));
+    await backendWrite(() => backend.clearFeedSource(appId), getPluginI18nString('couldNotRemoveFeedSource'));
 
-    const url = this.sources[appId]?.url;
+    if (!Object.prototype.hasOwnProperty.call(this.sources, appId))
+      return;
 
-    if (url) {
-      this.invalidateFeed(url);
-    }
+    const url = this.sources[appId].url;
+
+    if (url)
+      this.invalidateFeed(url, appId);
 
     delete this.sources[appId];
 
@@ -264,8 +273,8 @@ export class FeedManager {
 
   /** Updates the "Show in What's New" setting for a specific feed identified by its AppID. */
   async setShowFeedInWhatsNew(appId: string, value: boolean) {
-    if (!await backend.setShowFeedInWhatsNew(appId, value))
-      throw new Error(getPluginI18nString('couldNotSaveFeedSource'));
+    await backendWrite(() => backend.setShowFeedInWhatsNew(appId, value),
+      getPluginI18nString('couldNotSaveFeedSource'));
 
     const source = this.sources[appId] ||= { url: '', showFeedInWhatsNew: true };
     source.showFeedInWhatsNew = value;
@@ -273,13 +282,13 @@ export class FeedManager {
     this.notify();
   }
 
-  /** Sets the maximum number of items from a feed that can appear in "What's New" for a specific feed identified by its AppID. */
+  /** Sets how many items of an AppID's feed may appear in "What's New"; 0 means unlimited. */
   async setMaxItemsFromFeedInWhatsNew(appId: string, value: number) {
     if (!Number.isInteger(value) || value < 0 || value > EXTERNAL_NEWS_MAX_ITEMS)
       throw new Error(getPluginI18nString('couldNotSaveFeedSource'));
 
-    if (!await backend.setMaxItemsFromFeedInWhatsNew(appId, value))
-      throw new Error(getPluginI18nString('couldNotSaveFeedSource'));
+    await backendWrite(() => backend.setMaxItemsFromFeedInWhatsNew(appId, value),
+      getPluginI18nString('couldNotSaveFeedSource'));
 
     const source = this.sources[appId] ||= { url: '', showFeedInWhatsNew: true };
     source.maxItemsFromFeedInWhatsNew = value;

@@ -1,8 +1,10 @@
 import { retryInstall } from './retry-install';
 import { findModule, findModuleExport } from 'millennium';
-import { isNonSteamId, steam, type AppOverview, type AppData, type LibraryFilter } from './client';
+import {
+  isNonSteamId, steam, type AppOverview, type AppData, type AssociationData, type LibraryFilter, type SteamCollection
+} from './client';
 import { MethodHooks } from './method-hooks';
-import { PLAYER_TAG_CATEGORIES } from './store-tags';
+import { localTagId, PLAYER_TAG_CATEGORIES } from './store-tags';
 import type { GameDetailsManager, GameDetails } from '../game-details/manager';
 import type { CalendarDate } from '../game-details/calendar-date';
 
@@ -42,7 +44,7 @@ function subscribeToOverviewChanges(apps: OverviewApps, notify: () => void): () 
  * Converts a CalendarDate to a Unix timestamp at noon local time.
  * Noon avoids midnight transitions while preserving the selected local day.
  */
-export function calendarDateSeconds(date: CalendarDate): number {
+function calendarDateSeconds(date: CalendarDate): number {
   const [year, month, day] = date.split('-').map(Number);
 
   return Math.floor(new Date(year, month - 1, day, 12).getTime() / 1000);
@@ -65,15 +67,9 @@ function registerCompanyAssociations(manager: GameDetailsManager): () => void {
 
     const cache = store.m_mapAppData;
 
-    hooks.wrap(store, 'GetAppData', (original, _instance, [appId]) => {
-      const data = original()!;
-      const details = manager.details[String(appId)];
-
-      if (!isNonSteamId(appId) || (!details?.developer && !details?.publisher))
-        return data;
-
-      if (data === published.get(appId)?.view)
-        return data;
+    const createView = (appId: number, data: AppData) => {
+      // Steam compares associations by reference; rebuild only when an input changes.
+      let merged: { native: AssociationData | null; saved: GameDetails; value: AssociationData } | undefined;
 
       const view = new Proxy(data, {
         get(target, key, receiver) {
@@ -83,28 +79,77 @@ function registerCompanyAssociations(manager: GameDetailsManager): () => void {
             return Reflect.get(target, key, receiver);
 
           const native = target.associationData;
-          const associations = { ...native, rgFranchises: native?.rgFranchises || [] };
 
-          return {
-            ...associations,
-            rgDevelopers: saved.developer?.map(strName => ({ strName, strURL: '' })) || native?.rgDevelopers || [],
-            rgPublishers: saved.publisher?.map(strName => ({ strName, strURL: '' })) || native?.rgPublishers || [],
-          };
+          if (merged?.native !== native || merged.saved !== saved) {
+            merged = {
+              native,
+              saved,
+              value: {
+                ...native,
+                rgFranchises: native?.rgFranchises || [],
+                rgDevelopers: saved.developer?.map(strName => ({ strName, strURL: '' })) || native?.rgDevelopers || [],
+                rgPublishers: saved.publisher?.map(strName => ({ strName, strURL: '' })) || native?.rgPublishers || [],
+              },
+            };
+          }
+
+          return merged.value;
         }
       });
 
       published.set(appId, { original: data, view });
 
-      cache.set(appId, view);
+      return view;
+    };
+
+    /** Returns the published view for an app, creating it when an override applies. */
+    const viewFor = (appId: number, data: AppData | undefined) => {
+      const details = manager.details[String(appId)];
+
+      // Steam returns no data until it has loaded an app's details.
+      if (!data || !isNonSteamId(appId) || (!details?.developer && !details?.publisher))
+        return undefined;
+
+      const entry = published.get(appId);
+
+      if (data === entry?.view)
+        return data;
+
+      // The view reads overrides live, so it stays valid while the native data does.
+      return data === entry?.original ? entry.view : createView(appId, data);
+    };
+
+    hooks.wrap(store, 'GetAppData', (original, _instance, [appId]) => {
+      const data = original();
+      const view = viewFor(appId, data);
+
+      if (!view || view === data)
+        return data;
+
+      // Steam reads app data during renders. Publish to its observable cache
+      // afterwards so the read path itself has no side effects.
+      queueMicrotask(() => {
+        if (cache.get(appId) === data && published.get(appId)?.view === view)
+          cache.set(appId, view);
+      });
 
       return view;
     });
 
     refresh = () => {
       for (const id of Object.keys(manager.details)) {
-        if (isNonSteamId(Number(id))) {
-          store.GetAppData!(Number(id));
-        }
+        const appId = Number(id);
+
+        if (!isNonSteamId(appId))
+          continue;
+
+        // Asking Steam lets it load missing data; publish synchronously outside renders.
+        store.GetAppData!(appId);
+        const data = cache.get(appId);
+        const view = viewFor(appId, data);
+
+        if (view && view !== data)
+          cache.set(appId, view);
       }
     };
 
@@ -120,7 +165,7 @@ function registerCompanyAssociations(manager: GameDetailsManager): () => void {
     return true;
   };
 
-  const stopInstalling = retryInstall(install, 500);
+  const stopInstalling = retryInstall(install, 500, { name: 'Game details installation' });
 
   return () => {
     stopInstalling();
@@ -158,17 +203,20 @@ function installBigPictureFilters(hooks: MethodHooks): void {
   }
 }
 
+const LOCAL_TAG_COLLECTION_ERROR = 'Collections with custom tags cannot be saved to Steam Cloud. '
+  + 'Use these tags in Library Filters locally.';
+
 function installLocalTagActions(hooks: MethodHooks): void {
   const collections = steam().collectionStore;
 
   if (collections?.NewUnsavedCollection) {
     // This factory creates an unsaved in-memory instance; it performs no writes.
-    const prototype = Object.getPrototypeOf(collections.NewUnsavedCollection('', undefined, [])) as import('./client').SteamCollection;
+    const prototype = Object.getPrototypeOf(collections.NewUnsavedCollection('', undefined, [])) as SteamCollection;
 
     hooks.wrap(prototype, 'Save', (original, collection) => {
       // Native collection saves sync filter specs (and their tag IDs) to Steam Cloud.
       if (collection.internalAppFilter?.GetAllSelectedOptions().some(({ option }) => option < 0))
-        return Promise.reject(new Error('Collections with custom tags cannot be saved to Steam Cloud. Use these tags in Library Filters locally.'));
+        return Promise.reject(new Error(LOCAL_TAG_COLLECTION_ERROR));
 
       return original();
     });
@@ -180,9 +228,11 @@ function installLocalTagActions(hooks: MethodHooks): void {
   if (Filter) {
     // Steam's "Search the Store" link must never include our local tag IDs.
     hooks.wrap(Filter.prototype, 'GetTagsString', (_original, filter) => {
-      const options = filter.GetAllSelectedOptions();
+      if (filter.searchText.length)
+        return '';
 
-      return filter.searchText.length ? '' : `?tags=${options.filter(({ option }) => option >= 0).map(({ option }) => option).join(',')}`;
+      const steamTags = filter.GetAllSelectedOptions().map(({ option }) => option).filter(option => option >= 0);
+      return `?tags=${steamTags.join(',')}`;
     });
   }
 }
@@ -198,27 +248,23 @@ function createOverviewView(original: AppOverview, details: GameDetails, tags: n
   // A writable copy avoids Proxy invariants for Steam's immutable bound methods.
   // Delegate reads and writes to the original so asynchronous updates stay live.
   return new Proxy(Object.setPrototypeOf({ ...original }, Object.getPrototypeOf(original)), {
-    get(_target, property, receiver) {
+    get(copy, property, receiver) {
       // Steam's lazy binding getters install immutable methods on the receiver.
       // Subsequent reads must return that exact function to satisfy Proxy invariants.
-      const bound = Object.getOwnPropertyDescriptor(_target, property);
+      const bound = Object.getOwnPropertyDescriptor(copy, property);
       if (bound && !bound.configurable && 'value' in bound && !bound.writable)
         return bound.value;
 
-      const target = original;
       if (property === 'BHasStoreTag' && tags?.length)
         return hasStoreTag;
 
       if (property === 'm_setStoreCategories' && categories?.length)
-        return new Set([...(target.m_setStoreCategories || []), ...categories]);
+        return new Set([...(original.m_setStoreCategories || []), ...categories]);
 
       if (property === 'm_setStoreTags' && tags?.length) {
         // Steam can replace its localization map after a server refresh.
         cacheTagNames();
-        return new Set([
-          ...(target.m_setStoreTags || []),
-          ...tags
-        ]);
+        return new Set([...(original.m_setStoreTags || []), ...tags]);
       }
 
       if (property === 'rt_original_release_date' && details.releaseDate)
@@ -230,10 +276,10 @@ function createOverviewView(original: AppOverview, details: GameDetails, tags: n
       if (property === '__cachedReleaseYearString' && details.releaseDate)
         return undefined;
 
-      return Reflect.get(target, property, receiver);
+      return Reflect.get(original, property, receiver);
     },
 
-    set(_target, property, value) {
+    set(_copy, property, value) {
       return Reflect.set(original, property, value);
     },
   });
@@ -255,8 +301,9 @@ function registerOverviewDetails(manager: GameDetailsManager): () => void {
     const tagNames = new Map<number, string>();
     const tagMaps = new Set<Record<number, string>>();
     const hooks = new MethodHooks();
-    installBigPictureFilters(hooks);
+    let publishing = false;
 
+    installBigPictureFilters(hooks);
     installLocalTagActions(hooks);
 
     const cacheTagNames = () => {
@@ -284,7 +331,12 @@ function registerOverviewDetails(manager: GameDetailsManager): () => void {
 
         if (id === undefined) {
           // Steam tag IDs are positive; negative IDs are local to this plugin.
-          id = -(tagIds.size + 1);
+          id = localTagId(name);
+
+          // Hash collisions are rare; probe to the next free ID.
+          while (tagNames.has(id))
+            id--;
+
           tagIds.set(name, id);
           tagNames.set(id, name);
         }
@@ -348,8 +400,16 @@ function registerOverviewDetails(manager: GameDetailsManager): () => void {
         }
       }
 
-      if (changed.length)
+      if (!changed.length)
+        return;
+
+      // Our own notification needs no resync through the hook below.
+      publishing = true;
+      try {
         steam().collectionStore?.OnAppOverviewChange(changed, []);
+      } finally {
+        publishing = false;
+      }
     };
 
     const safeSync = () => {
@@ -370,6 +430,18 @@ function registerOverviewDetails(manager: GameDetailsManager): () => void {
           safeSync();
       });
     };
+
+    // Remote disconnects can update the store again after the native notification.
+    // Resync after every processed library update, including that final replacement.
+    const collections = steam().collectionStore;
+    if (collections) {
+      hooks.wrap(collections, 'OnAppOverviewChange', (original) => {
+        const result = original();
+        if (!publishing)
+          onAppOverviewChange();
+        return result;
+      });
+    }
 
     const unsubscribeOverview = subscribeToOverviewChanges(SteamClient.Apps, onAppOverviewChange);
     const unsubscribe = manager.subscribe(safeSync);
@@ -400,9 +472,8 @@ function registerOverviewDetails(manager: GameDetailsManager): () => void {
 
       for (const names of tagMaps) {
         for (const [id, name] of tagNames) {
-          if (names[id] === name) {
+          if (names[id] === name)
             delete names[id];
-          }
         }
       }
 
@@ -414,7 +485,7 @@ function registerOverviewDetails(manager: GameDetailsManager): () => void {
     return true;
   };
 
-  const stopInstalling = retryInstall(install, 500);
+  const stopInstalling = retryInstall(install, 500, { name: 'Game details installation' });
 
   return () => {
     stopInstalling();

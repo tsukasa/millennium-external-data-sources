@@ -1,5 +1,7 @@
 import { beforeEach, expect, test } from 'bun:test';
-import { installBackend, FeedManager, GameDetailsManager, registerShortcutRemoval, id, otherId, url, tick, runtime } from './helpers/ui-runtime';
+import {
+  installBackend, FeedManager, GameDetailsManager, registerShortcutRemoval, id, otherId, url, tick, runtime
+} from './helpers/ui-runtime';
 
 beforeEach(installBackend);
 
@@ -33,7 +35,11 @@ test('removing a shortcut clears options even when no feed URL was saved', async
 
 test('removing a non-Steam shortcut clears only its configured feed', async () => {
   runtime.saved = { [id]: url, [otherId]: 'https://other.test/rss' };
-  runtime.savedDetails = { [id]: { releaseDate: '2004-11-23', addedToLibraryDate: '2020-01-01', developer: ['Studio'], publisher: ['Publisher'] } };
+  runtime.savedDetails = {
+    [id]: {
+      releaseDate: '2004-11-23', addedToLibraryDate: '2020-01-01', developer: ['Studio'], publisher: ['Publisher'],
+    },
+  };
   const feedManager = new FeedManager(); await feedManager.load();
   const gameDetails = new GameDetailsManager(); await gameDetails.load();
   const removedShortcuts: number[] = [];
@@ -61,3 +67,22 @@ test('removing a non-Steam shortcut clears only its configured feed', async () =
   expect(apps.RemoveShortcut).toBe(original);
 });
 
+test('removing a shortcut clears stored settings even when they were never loaded', async () => {
+  runtime.saved = { [id]: url };
+  runtime.savedDetails = { [id]: { developer: ['Studio'] } };
+  const feedManager = new FeedManager();
+  const gameDetails = new GameDetailsManager();
+  const apps = { RemoveShortcut(_appId: number) {} };
+  Object.assign(globalThis, { SteamClient: { Apps: apps } });
+  const unregister = registerShortcutRemoval(feedManager, gameDetails);
+  try {
+    apps.RemoveShortcut(Number(id));
+    await tick();
+    expect(runtime.saved[id]).toBeUndefined();
+    expect(runtime.savedDetails[id]).toBeUndefined();
+  } finally {
+    unregister();
+    feedManager.dispose();
+    gameDetails.dispose();
+  }
+});

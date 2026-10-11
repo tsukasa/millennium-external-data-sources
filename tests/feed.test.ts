@@ -10,7 +10,9 @@ beforeAll(() => {
 
 const source = 'https://example.com/news/feed.xml';
 const rss = (items: string) => `<rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Studio &amp; News</title>${items}</channel></rss>`;
-const item = (title: string, date = '', extra = '') => `<item><title>${title}</title><link>/${title}</link><pubDate>${date}</pubDate>${extra}</item>`;
+const item = (title: string, date = '', extra = '') =>
+  `<item><title>${title}</title><link>/${title}</link><pubDate>${date}</pubDate>${extra}</item>`;
+const htmlDescription = (html: string) => `<description><![CDATA[${html}]]></description>`;
 
 test('article links resolve against their document and reject invalid or non-HTTP URLs', () => {
   const doc = new JSDOM('<body></body>', { url: source }).window.document;
@@ -67,7 +69,8 @@ test('RSS: dates, stable undated order, CDATA, deduplication, namespaces and med
 test('Atom: xml:base, alternate links, updated fallback, XHTML and enclosure', () => {
   const entries = parseFeed(`<feed xmlns="http://www.w3.org/2005/Atom" xml:base="https://studio.test/">
     <title>Studio</title><entry xml:base="updates/"><id>1</id><title>Update</title>
-    <link rel="self" href="entry.xml"/><link rel="alternate" href="one"/><link rel="enclosure" type="image/png" href="cover.png"/>
+    <link rel="self" href="entry.xml"/><link rel="alternate" href="one"/>
+    <link rel="enclosure" type="image/png" href="cover.png"/>
     <updated>2026-09-01T12:00:00+02:00</updated><content type="xhtml"><div xmlns="http://www.w3.org/1999/xhtml"><p>Patch notes</p></div></content>
     </entry></feed>`, source);
 
@@ -82,8 +85,9 @@ test('Atom: xml:base, alternate links, updated fallback, XHTML and enclosure', (
 });
 
 test('safe text and links, HTML image fallback and no image', () => {
-  const entries = parseFeed(rss(item('safe', '', '<description><![CDATA[<script>alert(1)</script><b>Text</b><img src="cover.png">]]></description>') +
-    '<item><title>Unsafe</title><link>javascript:alert(1)</link></item>' + item('plain')), source);
+  const unsafe = '<item><title>Unsafe</title><link>javascript:alert(1)</link></item>';
+  const safe = item('safe', '', htmlDescription('<script>alert(1)</script><b>Text</b><img src="cover.png">'));
+  const entries = parseFeed(rss(safe + unsafe + item('plain')), source);
 
   expect(entries).toHaveLength(2);
   expect(entries[0].contents).toBe('Text');
@@ -99,7 +103,7 @@ test('empty and unsupported feeds', () => {
 });
 
 test('image selection precedes removal of non-visible HTML content', () => {
-  const xml = rss(item('cover', '', '<description><![CDATA[<object><img src="cover.png"></object><p>Visible text</p>]]></description>'));
+  const xml = rss(item('cover', '', htmlDescription('<object><img src="cover.png"></object><p>Visible text</p>')));
   expect(parseFeed(xml, source)[0]).toMatchObject({
     contents: 'Visible text',
     image: 'https://example.com/news/cover.png',
@@ -107,7 +111,8 @@ test('image selection precedes removal of non-visible HTML content', () => {
 });
 
 test('cache shares requests, expires, retries errors and ignores invalidated completions', async () => {
-  let now = 0, calls = 0;
+  let now = 0;
+  let calls = 0;
   let resolve!: (value: string) => void;
 
   const cache = new FeedCache(async () => {
@@ -140,7 +145,7 @@ test('cache shares requests, expires, retries errors and ignores invalidated com
     url: source,
     xml: rss(item('old'))
   }));
-  
+
   await expired;
   const fresh = cache.get('2147483648', source);
   expect(calls).toBe(3);
@@ -149,7 +154,7 @@ test('cache shares requests, expires, retries errors and ignores invalidated com
     url: source,
     xml: rss(item('fresh'))
   }));
-  
+
   await fresh;
   let attempts = 0;
 
@@ -161,4 +166,24 @@ test('cache shares requests, expires, retries errors and ignores invalidated com
   await expect(failing.get('2147483648', source)).rejects.toThrow('offline');
   await expect(failing.get('2147483648', source)).rejects.toThrow('offline');
   expect(attempts).toBe(2);
+});
+
+test('large feeds keep only the newest entries and parse HTML for those alone', () => {
+  const entries = Array.from({ length: 60 }, (_, index) =>
+    item(`post-${index}`, new Date(Date.UTC(2026, 0, 1 + index)).toUTCString(),
+      '<description>&lt;b&gt;Body&lt;/b&gt;</description>'));
+  const parser = new DOMParser();
+  const parse = parser.parseFromString.bind(parser);
+  let htmlParses = 0;
+  parser.parseFromString = ((text: string, type: DOMParserSupportedType) => {
+    if (type === 'text/html') htmlParses++;
+    return parse(text, type);
+  }) as typeof parser.parseFromString;
+
+  const parsed = parseFeed(rss(entries.reverse().join('')), source, parser, 5);
+  expect(parsed.map(entry => entry.title)).toEqual(['post-59', 'post-58', 'post-57', 'post-56', 'post-55']);
+  expect(parsed[0].contents).toBe('Body');
+  // One content document and one title document per kept entry.
+  expect(htmlParses).toBe(10);
+  expect(parseFeed(rss(entries.join('')), source)).toHaveLength(50);
 });

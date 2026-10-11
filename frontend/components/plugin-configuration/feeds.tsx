@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { getPluginI18nString } from '../../i18n';
 import { FeedManager } from '../../feed/manager';
 import { useAsyncStatus } from '../../hooks/use-async-status';
+import { sectionPanelClassName } from './section-selector';
 import {
   EXTERNAL_NEWS_DEFAULT_FETCH_INTERVAL, EXTERNAL_NEWS_DEFAULT_CONCURRENT_FETCHES,
   EXTERNAL_NEWS_MIN_FETCH_INTERVAL, EXTERNAL_NEWS_MAX_FETCH_INTERVAL,
@@ -40,7 +41,8 @@ export function PluginConfigurationFeed({ feedManager, visible }: PluginConfigur
   const minutes = Number(interval);
   const count = Number(concurrency);
 
-  const inputPassedValidation = FeedManager.isValidGlobalFeedIntervalValue(minutes) && FeedManager.isValidGlobalFeedConcurrencyValue(count);
+  const inputPassedValidation = FeedManager.isValidGlobalFeedIntervalValue(minutes)
+    && FeedManager.isValidGlobalFeedConcurrencyValue(count);
 
   const save = () => {
     if (!inputPassedValidation)
@@ -50,7 +52,7 @@ export function PluginConfigurationFeed({ feedManager, visible }: PluginConfigur
   };
 
   return (
-    <div className={`DialogBody extdatasrc-plugin-settings-panel${visible ? '' : ' extdatasrc-plugin-settings-panel-hidden'}`}>
+    <div className={sectionPanelClassName(visible)}>
 
       {/* Feed Refresh Interval */}
 

@@ -16,6 +16,10 @@ local FEED_CONCURRENCY_MIN = 1
 local FEED_CONCURRENCY_MAX = 8
 local FEED_ITEMS_MAX = 5
 local FEED_ITEMS_DEFAULT = 3
+-- Feeds are parsed on Steam's UI thread; larger responses are rejected (5 MiB).
+local FEED_BODY_MAX_BYTES = 5242880
+-- What's New hides articles older than 30 days, so older removals can be forgotten.
+local FEED_REMOVED_ITEM_MAX_AGE = 2592000
 local RELEASE_YEAR_MIN = 1960
 local GAME_DETAIL_FIELDS = {
     releaseDate        = true,
@@ -191,6 +195,36 @@ local function listNames(value, allowTagIds)
     return names
 end
 
+--- Read removed What's New articles, dropping entries past the What's New age limit.
+--- Entries from v0.1.3 and earlier are plain URLs; they are treated as removed now.
+--- @return table items List of { url, removedAt } entries
+--- @return boolean changed Whether the stored list needs to be rewritten
+local function readRemovedItems()
+    local items, err = millennium.config.get("feedRemovedItems")
+
+    assert(not err, err)
+    assert(items == nil or type(items) == "table", "Invalid removed feed items")
+
+    local now = os.time()
+    local result, changed = {}, false
+
+    for _, entry in ipairs(items or {}) do
+        if type(entry) == "string" then
+            entry, changed = { url = entry, removedAt = now }, true
+        end
+
+        if type(entry) == "table" and type(entry.url) == "string" and type(entry.removedAt) == "number"
+            and now - entry.removedAt <= FEED_REMOVED_ITEM_MAX_AGE then
+            result[#result + 1] = entry
+        else
+            changed = true
+        end
+    end
+
+    return result, changed
+end
+
+
 -------------------------------------------------------------------------------
 --- Exported Backend FFI Functions                                          ---
 -------------------------------------------------------------------------------
@@ -230,6 +264,7 @@ function fetchFeed(app_id)
     assert(response, err or "Feed request failed")
     assert(response.status >= 200 and response.status < 300, "Feed HTTP error " .. tostring(response.status))
     assert(type(response.body) == "string" and #response.body > 0, "Feed response is empty")
+    assert(#response.body <= FEED_BODY_MAX_BYTES, "Feed response is too large")
 
     return json.encode({ url = url, xml = response.body })
 end
@@ -327,9 +362,16 @@ end
 --- @return boolean success True after the config is cleared
 function clearGameDetails(app_id)
     local app, key = readAppConfig(app_id)
+    local changed = false
 
     for field in pairs(GAME_DETAIL_FIELDS) do
+        changed = changed or app[field] ~= nil
         app[field] = nil
+    end
+
+    -- Shortcut removal clears unconditionally; skip writes when nothing is stored.
+    if not changed then
+        return true
     end
 
     return writeAppConfig(key, app, "Could not remove game details")
@@ -383,12 +425,19 @@ end
 --- @ffi
 --- @return string urls JSON array of removed article URLs
 function getFeedRemovedItems()
-    local items, err = millennium.config.get("feedRemovedItems")
+    local items, changed = readRemovedItems()
+    local urls = {}
 
-    assert(not err, err)
-    assert(items == nil or type(items) == "table", "Invalid removed feed items")
+    if changed then
+        -- Persisting the pruned list is best effort; reading must still succeed.
+        millennium.config.set("feedRemovedItems", items)
+    end
 
-    return json.encode(items or {})
+    for i, entry in ipairs(items) do
+        urls[i] = entry.url
+    end
+
+    return json.encode(urls)
 end
 
 --- Persist a removed article URL once, without touching per-AppID settings.
@@ -398,20 +447,23 @@ end
 function addFeedRemovedItem(url)
     assert(isValidUrl(url), "Invalid article URL")
 
-    local items, read_err = millennium.config.get("feedRemovedItems")
-
-    assert(not read_err, read_err)
-    assert(items == nil or type(items) == "table", "Invalid removed feed items")
-
-    items = items or {}
+    local items, changed = readRemovedItems()
+    local known = false
 
     for _, existing in ipairs(items) do
-        if existing == url then
-            return true
+        if existing.url == url then
+            known = true
+            break
         end
     end
 
-    items[#items + 1] = url
+    if known and not changed then
+        return true
+    end
+
+    if not known then
+        items[#items + 1] = { url = url, removedAt = os.time() }
+    end
 
     local ok, err = millennium.config.set("feedRemovedItems", items)
 
@@ -425,7 +477,7 @@ end
 --- @param app_id string Non-Steam AppID
 --- @param url string HTTP or HTTPS feed URL
 --- @param show_in_whats_new boolean Whether the feed appears in What's New
---- @param max_items_from_feed_in_whats_new number The maximum number of items from the feed that can appear in What's New
+--- @param max_items_from_feed_in_whats_new number Maximum number of feed items shown in What's New
 --- @return boolean success True after the config is saved
 function saveFeedSource(app_id, url, show_in_whats_new, max_items_from_feed_in_whats_new)
     assert(isValidUrl(url), "Enter an HTTP or HTTPS feed URL")

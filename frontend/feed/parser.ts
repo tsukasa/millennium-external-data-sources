@@ -1,7 +1,9 @@
+import { EXTERNAL_NEWS_MAX_PARSED_ITEMS } from '../constants';
 import type { NewsItem } from './types';
 
 /** Returns direct child elements with the given local name. */
-const children = (element: Element, name: string) => Array.from(element.children).filter(child => child.localName === name);
+const children = (element: Element, name: string) =>
+  Array.from(element.children).filter(child => child.localName === name);
 
 /** Returns the first direct child element with the given local name. */
 const child = (element: Element, name: string) => children(element, name)[0];
@@ -13,9 +15,8 @@ const text = (element: Element, name: string) => child(element, name)?.textConte
 function baseUrl(element: Element, source: string): string {
   const chain: Element[] = [];
 
-  for (let node: Element | null = element; node; node = node.parentElement) {
+  for (let node: Element | null = element; node; node = node.parentElement)
     chain.unshift(node);
-  }
 
   for (const node of chain) {
     const base = node.getAttributeNS('http://www.w3.org/XML/1998/namespace', 'base');
@@ -64,7 +65,8 @@ function entryUrl(entry: Element, atom: boolean, source: string): string | undef
     : undefined;
 }
 
-function entryImage(entry: Element, atom: boolean, source: string, content: Element | undefined, html: Document): string | undefined {
+function entryImage(entry: Element, atom: boolean, source: string, content: Element | undefined,
+  html: Document): string | undefined {
   const media = Array.from(entry.getElementsByTagName('*')).filter(node =>
     node.namespaceURI === 'http://search.yahoo.com/mrss/' && ['content', 'thumbnail'].includes(node.localName));
 
@@ -95,10 +97,11 @@ function entryImage(entry: Element, atom: boolean, source: string, content: Elem
 
 /**
  * Parses an RSS 2.0 or Atom 1.0 feed into deduplicated news items, newest first.
- * Entries without a valid HTTP or HTTPS link are omitted.
+ * Entries without a valid HTTP or HTTPS link are omitted; only the newest `maxItems` are kept.
  * @throws If the XML is invalid or is not a supported feed format.
  */
-export function parseFeed(xml: string, source: string, parser = new DOMParser()): NewsItem[] {
+export function parseFeed(xml: string, source: string, parser = new DOMParser(),
+  maxItems = EXTERNAL_NEWS_MAX_PARSED_ITEMS): NewsItem[] {
   const doc = parser.parseFromString(xml, 'application/xml');
 
   if (doc.getElementsByTagName('parsererror').length)
@@ -115,8 +118,9 @@ export function parseFeed(xml: string, source: string, parser = new DOMParser())
   const entries = children(container, atom ? 'entry' : 'item');
   const ids = new Set<string>();
   const urls = new Set<string>();
-  const items: NewsItem[] = [];
+  const candidates: { entry: Element; gid: string; url: string; date: number | null }[] = [];
 
+  // Read only identity and date first; HTML parsing is the expensive part.
   for (const entry of entries) {
     const url = entryUrl(entry, atom, source);
 
@@ -128,23 +132,32 @@ export function parseFeed(xml: string, source: string, parser = new DOMParser())
     if (ids.has(gid) || urls.has(url))
       continue;
 
-    ids.add(gid); urls.add(url);
+    ids.add(gid);
+    urls.add(url);
 
+    const timestamp = Date.parse(text(entry, atom ? 'published' : 'pubDate') || text(entry, atom ? 'updated' : 'date'));
+
+    candidates.push({ entry, gid, url, date: Number.isFinite(timestamp) ? timestamp / 1000 : null });
+  }
+
+  const newest = candidates
+    .sort((a, b) => (b.date ?? -Infinity) - (a.date ?? -Infinity))
+    .slice(0, maxItems);
+
+  return newest.map(({ entry, gid, url, date }) => {
     const content = child(entry, atom ? 'content' : 'encoded') || child(entry, atom ? 'summary' : 'description');
     const rawContent = content?.getAttribute('type') === 'xhtml' ? content.innerHTML : content?.textContent || '';
     const html = parser.parseFromString(rawContent, 'text/html');
+    // Select the image before documentText() removes non-visible elements.
     const image = entryImage(entry, atom, source, content, html);
-    const timestamp = Date.parse(text(entry, atom ? 'published' : 'pubDate') || text(entry, atom ? 'updated' : 'date'));
 
-    items.push({
+    return {
       gid,
       url,
       title: plainText(text(entry, 'title'), parser) || 'Untitled',
       contents: documentText(html),
-      date: Number.isFinite(timestamp) ? timestamp / 1000 : null,
+      date,
       image
-    });
-  }
-
-  return items.sort((a, b) => (b.date ?? -Infinity) - (a.date ?? -Infinity));
+    };
+  });
 }

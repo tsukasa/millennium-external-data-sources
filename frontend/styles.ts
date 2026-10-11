@@ -26,152 +26,127 @@ export const uiCss = `
   width: 24px;
 }
 
-/* Global feed settings Save button and status messages in settings and game properties. */
-.extdatasrc-plugin-settings-feed-save-button,
-.extdatasrc-plugin-form-status-message {
+/* Global feed settings Save button and status message in the plugin settings. */
+.extdatasrc-plugin-settings-feed-save-button {
   margin-top: 12px;
 }
 
-/* News source and game details headers and control sections in game properties. */
-.extdatasrc-plugin-news-source-header,
-.extdatasrc-plugin-news-source-controls,
-.extdatasrc-plugin-game-details-header,
-.extdatasrc-plugin-game-details-date-section {
-  flex-shrink: 0;
+/* Space between the news source and game details sections. */
+.extdatasrc-plugin-page > * + * {
+  margin-top: 24px;
 }
 
-/* Year, month and day dropdown row for release and library addition dates in game properties. */
-.extdatasrc-plugin-game-details-date-controls {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  width: 100%;
-  min-width: 0;
-}
-
-/* Year dropdown container in each game properties date field. */
-.extdatasrc-plugin-game-details-date-year {
-  width: 110px;
-}
-
-/* Month dropdown container in each game properties date field. */
-.extdatasrc-plugin-game-details-date-month {
-  width: 160px;
-}
-
-/* Day dropdown container in each game properties date field. */
-.extdatasrc-plugin-game-details-date-day {
-  width: 90px;
-}
-
-/* Developer, publisher and tag editor groups in the external game details section. */
-.extdatasrc-plugin-game-details-list-editor {
-  flex-shrink: 0;
-  min-width: 0;
-  display: grid;
-  margin-top: 6px;
-}
-
-/* Native Steam field background underneath each developer, publisher and tag editor. */
-.extdatasrc-plugin-game-details-list-editor-background {
-  grid-area: 1 / 1;
-  display: grid;
-  pointer-events: none;
-}
-
-/* Label above the input in each developer, publisher and tag editor. */
-.extdatasrc-plugin-game-details-list-editor-label {
-  position: absolute;
-  top: 12px;
-  left: 12px;
-}
-
-/* Input controls and saved entries overlaid on each native list editor background. */
-.extdatasrc-plugin-game-details-list-editor-content {
-  grid-area: 1 / 1;
-  position: relative;
-  min-width: 0;
-  padding: 40px 12px 12px;
-}
-
-/* Text input container beside the Add button in developer, publisher and tag editors. */
-.extdatasrc-plugin-game-details-list-editor-input {
+/* A text input below its label spans the field, like Steam's Target input. */
+.extdatasrc-plugin-wide-input .DialogInput_Wrapper {
   flex: 1;
   min-width: 0;
-  padding: 0;
 }
 
-/* Saved developer names, publisher names and tags below their respective inputs. */
-.extdatasrc-plugin-game-details-saved-entry-list {
-  list-style: none;
-  margin: 8px 0 0;
-  padding: 0;
+/* Text stops before Steam's clear action instead of running under it. */
+.extdatasrc-plugin-wide-input .DialogInput_Wrapper > input.DialogInput {
+  padding-inline-end: 44px;
 }
 
-/* Saved developer or publisher row containing a company name and its Remove button. */
-.extdatasrc-plugin-game-details-company-row {
+/*
+ * Description or saved values in a row of their own below an input row; themes such as
+ * Adwaita stretch the input over its row. Both rows join into one panel: themes draw rows
+ * as separate cards (Steam, Fluenty) or as a list (Adwaita), so only the shared edge changes.
+ */
+.extdatasrc-plugin-page .Field.Panel.Background:has(+ .extdatasrc-plugin-field-continuation) {
+  margin-bottom: 0 !important;
+  border-bottom-width: 0 !important;
+  border-bottom-left-radius: 0 !important;
+  border-bottom-right-radius: 0 !important;
+}
+
+.extdatasrc-plugin-page .extdatasrc-plugin-field-continuation.Field.Panel.Background {
+  margin-top: 0 !important;
+  padding-top: 0 !important;
+  border-top-width: 0 !important;
+  border-top-left-radius: 0 !important;
+  border-top-right-radius: 0 !important;
+}
+
+/* Validation message shown in place of a field description. */
+.extdatasrc-plugin-field-error {
+  color: #ff7070;
+}
+
+/* Year, month and day dropdowns of a game properties date field. */
+.extdatasrc-plugin-date-controls {
+  display: grid;
+  grid-template-columns: 96px 140px 80px;
   gap: 8px;
+  margin-left: auto;
 }
 
-/* Company names and tag labels in the saved game details lists. */
-.extdatasrc-plugin-game-details-entry-label {
+/* Saved developer, publisher and tag values below their input row. */
+.extdatasrc-plugin-token-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* A saved value; Steam store tags use the library filter's accent colour. */
+.extdatasrc-plugin-token {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 2px 2px 10px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #dcdedf;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.extdatasrc-plugin-token-store {
+  background: #1a9fff;
+  color: #fff;
+}
+
+.extdatasrc-plugin-token-label {
   overflow-wrap: anywhere;
 }
 
-/* Remove button beside each saved developer or publisher name. */
-.extdatasrc-plugin-game-details-company-remove-button {
-  padding: 0 8px;
-  min-width: 0;
-}
-
-/* Store tag suggestion popup above or below the Tags input, rendered into the window body. */
-.extdatasrc-plugin-game-details-tag-suggestions-popup {
-  position: fixed;
-  padding: 0;
-  z-index: 1000;
-}
-
-/* Scrollable checkbox list inside the store tag suggestion popup. */
-.extdatasrc-plugin-game-details-tag-suggestions-list {
-  position: relative;
-  top: 0;
-  height: auto;
-  visibility: visible;
-  pointer-events: auto;
-  overflow-y: auto;
-}
-
-/* Wrapping row of saved tag chips below the Tags input. */
-.extdatasrc-plugin-game-details-tag-chip-list {
+.extdatasrc-plugin-token-remove {
   display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-
-/* Individual saved store or custom tag chip in external game details. */
-.extdatasrc-plugin-game-details-tag-chip {
-  border-radius: 12px;
-  padding: 1px 3px 1px 8px;
-  gap: 4px;
-  font-size: 12px;
-}
-
-/* Background of user-defined tag chips that are not linked to Steam store tag IDs. */
-.extdatasrc-plugin-game-details-custom-tag-chip {
-  background: rgba(255, 255, 255, 0.08);
-}
-
-/* Circular Remove button inside each saved tag chip. */
-.extdatasrc-plugin-game-details-tag-remove-button {
-  padding: 0;
-  min-width: 0;
+  align-items: center;
+  justify-content: center;
   width: 20px;
   height: 20px;
+  padding: 0;
   border: 0;
-  border-radius: 50%;
+  border-radius: 2px;
   background: transparent;
   color: inherit;
-  font-size: inherit;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.extdatasrc-plugin-token-remove:hover,
+.extdatasrc-plugin-token-remove.gpfocus {
+  background: rgba(0, 0, 0, 0.25);
+}
+
+/* Store tag suggestions below or above the Tags input, rendered into the window body. */
+.extdatasrc-plugin-tag-suggestions {
+  position: fixed;
+  z-index: 1000;
+  box-sizing: border-box;
+  padding: 4px 12px;
+  overflow-y: auto;
+  border-radius: 3px;
+  background: #3d4450;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+/* Load and save results below a section. */
+.extdatasrc-plugin-form-status-message {
+  margin-top: 12px;
 }
 `;
 

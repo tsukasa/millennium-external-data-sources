@@ -58,7 +58,9 @@ export function createWhatsNewEvents(feedManager: FeedManager, native: NativeBin
 
       articles.clear();
 
-      for (const [appId, { url, showFeedInWhatsNew, maxItemsFromFeedInWhatsNew }] of Object.entries(feedManager.sources)) {
+      for (const [appId, source] of Object.entries(feedManager.sources)) {
+        const { url, showFeedInWhatsNew, maxItemsFromFeedInWhatsNew } = source;
+
         // Skip feed if presence in "What's New" is explicitly disabled.
         if (!url || showFeedInWhatsNew === false)
           continue;
@@ -72,7 +74,8 @@ export function createWhatsNewEvents(feedManager: FeedManager, native: NativeBin
         // Select visible items on every call because age and hidden state can change
         // while the parsed feed stays the same.
         const limit = maxItemsFromFeedInWhatsNew ?? EXTERNAL_NEWS_DEFAULT_MAX_ITEMS;
-        const visibleExternalNews = selectVisibleItems(items, appId, oldest, limit, feedManager.feedRemovedItems, hidden);
+        const visibleExternalNews = selectVisibleItems(items, appId, oldest, limit,
+          feedManager.feedRemovedItems, hidden);
 
         // Detect if we have items to purge from the model due to changes in visibility or recency.
         let entry = models.get(appId);

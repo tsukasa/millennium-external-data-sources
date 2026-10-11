@@ -1,4 +1,4 @@
-import type { NativeEventModel, NativeActivityEvent, QueryDataClient } from './news-types';
+import type { NativeEventModel, NativeActivityEvent } from './news-types';
 import type { NewsItem } from '../feed';
 import { steam } from './client';
 import type { NativeBindings } from './news-discovery';
@@ -83,21 +83,31 @@ export function createExternalNewsModels(native: NativeBindings, appId: string, 
   });
 }
 
-export function createExternalNewsEvents(native: NativeBindings, appId: string, items: NewsItem[], client: QueryDataClient): ExternalNewsEvent[] {
-  return createExternalNewsModels(native, appId, items).map(({ model: eventModel, item, images }, index) => {
-    // A fresh, private query result prevents the original image hook's store/clan
-    // fallback requests, including for articles without an image.
-    client.setQueryData(
-      native.imageQueryKey.map(value => value === native.probeGid ? eventModel.GID : value),
-      images
-    );
+export function createExternalNewsEvents(native: NativeBindings, appId: string,
+  items: NewsItem[]): ExternalNewsEvent[] {
+  const client = native.sharedClient;
 
-    // Steam's image hook also asks for fallback artwork even when the card has
-    // a capsule. Cache the absent fallback so that query never reaches Steam.
-    client.setQueryData(
-      ['useFallbackArtworkScreenshot', eventModel.GID],
-      null
-    );
+  return createExternalNewsModels(native, appId, items).map(({ model: eventModel, item, images }, index) => {
+    const loadEvent = () => {
+      // A fresh, private query result prevents the original image hook's store/clan
+      // fallback requests, including for articles without an image.
+      client.setQueryData(
+        native.imageQueryKey.map(value => value === native.probeGid ? eventModel.GID : value),
+        images
+      );
+
+      // Steam's image hook also asks for fallback artwork even when the card has
+      // a capsule. Cache the absent fallback so that query never reaches Steam.
+      client.setQueryData(
+        ['useFallbackArtworkScreenshot', eventModel.GID],
+        null
+      );
+      return eventModel;
+    };
+
+    // Steam removes inactive queries after five minutes. Restore the complete
+    // image list whenever its loader requests this event again.
+    loadEvent();
 
     const event = new native.ActivityEvent(
       eventModel.postTime,
@@ -109,8 +119,8 @@ export function createExternalNewsEvents(native: NativeBindings, appId: string, 
 
     Object.defineProperty(event, 'eventModel', { value: eventModel });
 
-    event.GetEvent = async () => eventModel;
-    event.ReloadEvent = async () => eventModel;
+    event.GetEvent = async () => loadEvent();
+    event.ReloadEvent = event.GetEvent;
     // The model is already local. Steam renders its native rating footer only
     // for loaded events; the activity section makes that footer inert.
     event.IsEventLoaded = () => true;

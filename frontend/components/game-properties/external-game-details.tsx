@@ -1,14 +1,15 @@
-import { Button, DialogCheckbox, DialogControlsSection, Dropdown, Field, TextField, findClassModule } from 'millennium';
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import {
+  Button, DialogCheckbox, DialogControlsSection, DialogControlsSectionHeader, Dropdown, Field, TextField
+} from 'millennium';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { getPluginI18nString } from '../../i18n';
 import { dateLocales } from '../../steam/client';
 import { findStoreTags, storeTagName } from '../../steam/store-tags';
 import { daysInMonth, MIN_RELEASE_YEAR, maxReleaseYear, toCalendarDate } from '../../game-details/calendar-date';
 import { useAsyncStatus } from '../../hooks/use-async-status';
-import { usePropertyStyles } from '../../hooks/use-property-styles';
 import { usePluginStyles } from '../../hooks/use-plugin-styles';
-import type { PropertyStyles } from '../../hooks/use-property-styles';
+import { StatusMessage } from './status-message';
 import type { StoreTag } from '../../steam/store-tags';
 import type { GameDetailsManager, GameDetails, GameDetailField } from '../../game-details/manager';
 
@@ -27,7 +28,9 @@ interface ExternalGameDetailsProps {
 function DateField({ label, value, disabled, onChange }: DateFieldProps) {
   const parts = value?.split('-').map(Number);
   const selected = parts ? new Date(parts[0], parts[1] - 1, parts[2], 12) : new Date();
-  const year = selected.getFullYear(), month = selected.getMonth() + 1, day = selected.getDate();
+  const year = selected.getFullYear();
+  const month = selected.getMonth() + 1;
+  const day = selected.getDate();
   const lastYear = maxReleaseYear();
   const formatter = new Intl.DateTimeFormat(dateLocales(), { month: 'long' });
 
@@ -58,52 +61,82 @@ function DateField({ label, value, disabled, onChange }: DateFieldProps) {
     )));
 
   return (
-    <Field label={label} childrenContainerWidth="fixed" verticalAlignment="center">
-
-      <div role="group" aria-label={label} className="extdatasrc-plugin-game-details-date-controls">
-
-        <div className="extdatasrc-plugin-game-details-date-year">
-          <Dropdown menuLabel={`${label}: ${getPluginI18nString('year')}`} rgOptions={years}
-            selectedOption={value ? year : 0} disabled={disabled}
-            contextMenuPositionOptions={{ bGrowToElementWidth: true }}
-            onChange={option => option.data === 0 ? onChange('') : select(option.data, month)} />
-        </div>
-
-        <div className="extdatasrc-plugin-game-details-date-month">
-          <Dropdown menuLabel={`${label}: ${getPluginI18nString('month')}`} rgOptions={months}
-            selectedOption={value ? month : 0} disabled={disabled}
-            contextMenuPositionOptions={{ bGrowToElementWidth: true }}
-            onChange={option => option.data === 0 ? onChange('') : select(year, option.data)} />
-        </div>
-
-        <div className="extdatasrc-plugin-game-details-date-day">
-          <Dropdown menuLabel={`${label}: ${getPluginI18nString('day')}`} rgOptions={days}
-            selectedOption={value ? day : 0} disabled={disabled}
-            contextMenuPositionOptions={{ bGrowToElementWidth: true }}
-            onChange={option => option.data === 0 ? onChange('') : select(year, month, option.data)} />
-        </div>
-
+    <Field label={label} childrenContainerWidth="max" verticalAlignment="center" bottomSeparator="none">
+      <div role="group" aria-label={label} className="extdatasrc-plugin-date-controls">
+        <Dropdown menuLabel={`${label}: ${getPluginI18nString('year')}`} rgOptions={years}
+          selectedOption={value ? year : 0} disabled={disabled}
+          onChange={option => option.data === 0 ? onChange('') : select(option.data, month)} />
+        <Dropdown menuLabel={`${label}: ${getPluginI18nString('month')}`} rgOptions={months}
+          selectedOption={value ? month : 0} disabled={disabled}
+          onChange={option => option.data === 0 ? onChange('') : select(year, option.data)} />
+        <Dropdown menuLabel={`${label}: ${getPluginI18nString('day')}`} rgOptions={days}
+          selectedOption={value ? day : 0} disabled={disabled}
+          onChange={option => option.data === 0 ? onChange('') : select(year, month, option.data)} />
       </div>
-
     </Field>
   );
 }
 
-function ListField({ label, children }: { label: string; children: ReactNode }) {
+interface TokenListFieldProps<T extends StoreTag> {
+  label: string;
+  tokens: T[];
+  draft: string;
+  disabled: boolean;
+  tokenLabel(token: T): string;
+  tokenClassName?(token: T): string;
+  onDraft(value: string): void;
+  onAdd(): void;
+  onRemove(token: T): void;
+  onInputFocus?(input: HTMLInputElement): void;
+  rememberFocus(input: HTMLInputElement): void;
+  children?: ReactNode;
+}
+
+/**
+ * A settings row with only a label and an input, continued by a row with the saved values.
+ * Themes such as Adwaita render the input row as an entry row and stretch the input
+ * over it, so the values need a row of their own. Enter adds the input.
+ */
+function TokenListField<T extends StoreTag>({ label, tokens, draft, disabled, tokenLabel, tokenClassName,
+  onDraft, onAdd, onRemove, onInputFocus, rememberFocus, children }: TokenListFieldProps<T>) {
   return (
-    <div role="group" aria-label={label} className="extdatasrc-plugin-game-details-list-editor">
-      {/* Some themes turn Field inputs into full-row editors; keep the native surface separate. */}
-      <div className="extdatasrc-plugin-game-details-list-editor-background" aria-hidden="true">
-        <Field label={<span className="extdatasrc-plugin-game-details-list-editor-label">{label}</span>} />
-      </div>
-      <div className="extdatasrc-plugin-game-details-list-editor-content">
-        {children}
-      </div>
-    </div>
+    <>
+      <Field label={label} childrenLayout="below" bottomSeparator="none" className="extdatasrc-plugin-wide-input">
+        <TextField aria-label={label} value={draft} disabled={disabled}
+          onFocus={event => onInputFocus?.(event.currentTarget)}
+          onChange={event => {
+            onInputFocus?.(event.currentTarget);
+            onDraft(event.target.value);
+          }}
+          onKeyDown={event => {
+            if (event.key === 'Enter' && draft.trim()) {
+              event.preventDefault();
+              rememberFocus(event.currentTarget);
+              onAdd();
+            }
+          }} />
+      </Field>
+      {children}
+      {!!tokens.length && (
+        // The description spans the row; themes such as Adwaita push field children to the right.
+        <Field bottomSeparator="none" className="extdatasrc-plugin-field-continuation" description={
+          <ul aria-label={label} className="extdatasrc-plugin-token-list">
+            {tokens.map(token => (
+              <li key={String(token)} className={`extdatasrc-plugin-token ${tokenClassName?.(token) || ''}`}>
+                <span className="extdatasrc-plugin-token-label">{tokenLabel(token)}</span>
+                <Button className="extdatasrc-plugin-token-remove" disabled={disabled}
+                  aria-label={`${getPluginI18nString('clear')}: ${tokenLabel(token)}`}
+                  onClick={() => onRemove(token)}>×</Button>
+              </li>
+            ))}
+          </ul>
+        } />
+      )}
+    </>
   );
 }
 
-interface CompanyNamesFieldProps extends PropertyStyles {
+interface CompanyNamesFieldProps {
   field: 'developer' | 'publisher';
   names: string[];
   draft: string;
@@ -113,9 +146,7 @@ interface CompanyNamesFieldProps extends PropertyStyles {
   rememberFocus(input: HTMLInputElement): void;
 }
 
-function CompanyNamesField({ field, names, draft, disabled, classes, buttonClass,
-  onDraft, onSave, rememberFocus }: CompanyNamesFieldProps) {
-  const label = getPluginI18nString(field);
+function CompanyNamesField({ field, names, draft, disabled, onDraft, onSave, rememberFocus }: CompanyNamesFieldProps) {
   const add = () => {
     const name = draft.trim();
     if (name)
@@ -123,39 +154,13 @@ function CompanyNamesField({ field, names, draft, disabled, classes, buttonClass
   };
 
   return (
-    <ListField label={label}>
-      <div className={`${classes?.AsyncBackedInputChildren || ''} AsyncBackedInputChildren`}>
-        <div className="extdatasrc-plugin-game-details-list-editor-input">
-          <TextField aria-label={label} value={draft} disabled={disabled}
-            onChange={event => onDraft(event.target.value)}
-            onKeyDown={event => {
-              if (event.key === 'Enter' && draft.trim()) {
-                event.preventDefault();
-                rememberFocus(event.currentTarget);
-                add();
-              }
-            }} />
-        </div>
-        <Button className={buttonClass} aria-label={'+ ' + label}
-          disabled={disabled || !draft.trim()} onClick={add}>+</Button>
-      </div>
-      {!!names.length && (
-        <ul aria-label={label} className="extdatasrc-plugin-game-details-saved-entry-list">
-          {names.map(name => (
-            <li key={name} className="displayRow alignItemsCenter extdatasrc-plugin-game-details-company-row">
-              <span className="extdatasrc-plugin-game-details-entry-label">{name}</span>
-              <Button className={`${buttonClass} extdatasrc-plugin-game-details-company-remove-button`}
-                aria-label={getPluginI18nString('clear') + ': ' + name} disabled={disabled}
-                onClick={() => onSave(names.filter(value => value !== name))}>×</Button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </ListField>
+    <TokenListField label={getPluginI18nString(field)} tokens={names} draft={draft} disabled={disabled}
+      tokenLabel={name => name} onDraft={onDraft} onAdd={add} rememberFocus={rememberFocus}
+      onRemove={name => onSave(names.filter(value => value !== name))} />
   );
 }
 
-interface StoreTagsFieldProps extends PropertyStyles {
+interface StoreTagsFieldProps {
   tags: StoreTag[];
   draft: string;
   disabled: boolean;
@@ -164,38 +169,31 @@ interface StoreTagsFieldProps extends PropertyStyles {
   rememberFocus(input: HTMLInputElement): void;
 }
 
-function StoreTagsField({ tags, draft, disabled, classes, buttonClass,
-  onDraft, onSave, rememberFocus }: StoreTagsFieldProps) {
-  const inputContainer = useRef<HTMLDivElement | null>(null);
+function StoreTagsField({ tags, draft, disabled, onDraft, onSave, rememberFocus }: StoreTagsFieldProps) {
+  const input = useRef<HTMLInputElement | null>(null);
   const popup = useRef<HTMLDivElement | null>(null);
   const [anchor, setAnchor] = useState<DOMRect>();
-  const filterClasses = useMemo(() => findClassModule(value => value.SearchResultsBox
-    && value.FilterBucketBoxes && value.Checkbox) as Record<string, string> | undefined, []);
   const suggestions = findStoreTags(draft).slice(0, 10);
-  const win = inputContainer.current?.ownerDocument.defaultView;
+  const win = input.current?.ownerDocument.defaultView;
   const spaceBelow = anchor ? (win?.innerHeight || 0) - anchor.bottom : 0;
-  const openAbove = !!anchor && spaceBelow < Math.min(240, suggestions.length * 21 + 8) && anchor.top > spaceBelow;
+  const openAbove = !!anchor && spaceBelow < Math.min(240, suggestions.length * 32 + 8) && anchor.top > spaceBelow;
   const label = getPluginI18nString('tags');
 
   useEffect(() => {
     if (!anchor)
       return;
 
-    const container = inputContainer.current;
-    const doc = container?.ownerDocument;
+    const field = input.current;
+    const doc = field?.ownerDocument;
     const win = doc?.defaultView;
     if (!doc || !win)
       return;
 
     const closeOutside = (event: Event) => {
-      if (!container?.contains(event.target as Node) && !popup.current?.contains(event.target as Node))
+      if (event.target !== field && !popup.current?.contains(event.target as Node))
         setAnchor(undefined);
     };
-    const reposition = () => {
-      const input = container?.querySelector('input');
-      if (input)
-        setAnchor(input.getBoundingClientRect());
-    };
+    const reposition = () => setAnchor(field?.getBoundingClientRect());
     const escape = (event: KeyboardEvent) => {
       if (event.key === 'Escape')
         setAnchor(undefined);
@@ -220,74 +218,44 @@ function StoreTagsField({ tags, draft, disabled, classes, buttonClass,
   };
 
   const toggleTag = (id: number, checked: boolean) => {
-    const input = inputContainer.current?.querySelector('input');
-    if (input)
-      rememberFocus(input);
+    if (input.current)
+      rememberFocus(input.current);
     onSave(checked ? [...tags, id] : tags.filter(value => value !== id), true);
   };
 
   const renderSuggestions = () => {
-    const container = inputContainer.current;
-    if (!anchor || !suggestions.length || !container)
+    const field = input.current;
+    if (!anchor || !suggestions.length || !field)
       return null;
 
     return createPortal(
-      <div ref={popup} className={`extdatasrc-plugin-game-details-tag-suggestions-popup ${filterClasses?.Container || ''}`}
-        style={{ left: anchor.left, width: anchor.width,
-          ...(openAbove ? { bottom: (win?.innerHeight || 0) - anchor.top } : { top: anchor.bottom }) }}>
-        <div className={`${filterClasses?.FilterBucket || ''} ${filterClasses?.SearchResultsBox || ''}`}>
-          <div role="group" aria-label={label}
-            className={`extdatasrc-plugin-game-details-tag-suggestions-list ${filterClasses?.FilterBucketBoxes || ''}`}
-            style={{ maxHeight: Math.max(24, Math.min(240, (openAbove ? anchor.top : spaceBelow) - 8)) }}>
-            {suggestions.map(tag => (
-              <div key={tag.id} className={`${filterClasses?.Row || ''} ${filterClasses?.NotMoving || ''}`}>
-                <DialogCheckbox className={filterClasses?.Checkbox} label={tag.name} controlled
-                  checked={tags.includes(tag.id)} disabled={disabled}
-                  onChange={checked => toggleTag(tag.id, checked)} />
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>, container.ownerDocument.body
+      <div ref={popup} role="group" aria-label={label} className="extdatasrc-plugin-tag-suggestions"
+        style={{
+          left: anchor.left, width: anchor.width,
+          maxHeight: Math.max(48, Math.min(240, (openAbove ? anchor.top : spaceBelow) - 8)),
+          ...(openAbove ? { bottom: (win?.innerHeight || 0) - anchor.top + 4 } : { top: anchor.bottom + 4 }),
+        }}>
+        {suggestions.map(tag => (
+          <DialogCheckbox key={tag.id} label={tag.name} controlled bottomSeparator="none"
+            checked={tags.includes(tag.id)} disabled={disabled}
+            onChange={checked => toggleTag(tag.id, checked)} />
+        ))}
+      </div>, field.ownerDocument.body
     );
   };
 
   return (
-    <ListField label={label}>
-      <div className={`${classes?.AsyncBackedInputChildren || ''} AsyncBackedInputChildren`}>
-        <div ref={inputContainer} className="extdatasrc-plugin-game-details-list-editor-input">
-          <TextField aria-label={label} value={draft} disabled={disabled}
-            onFocus={event => setAnchor(event.currentTarget.getBoundingClientRect())}
-            onChange={event => {
-              setAnchor(event.currentTarget.getBoundingClientRect());
-              onDraft(event.target.value);
-            }}
-            onKeyDown={event => {
-              if (event.key === 'Enter' && draft.trim()) {
-                event.preventDefault();
-                rememberFocus(event.currentTarget);
-                add();
-              }
-            }} />
-          {renderSuggestions()}
-        </div>
-        <Button className={buttonClass} aria-label={'+ ' + label}
-          disabled={disabled || !draft.trim()} onClick={add}>+</Button>
-      </div>
-      {!!tags.length && (
-        <ul aria-label={label} className="extdatasrc-plugin-game-details-saved-entry-list extdatasrc-plugin-game-details-tag-chip-list">
-          {tags.map(tag => (
-            <li key={tag} className={`displayRow alignItemsCenter extdatasrc-plugin-game-details-tag-chip${typeof tag === 'number'
-              ? ` ${filterClasses?.FilterStoreTag || ''} ${filterClasses?.Selected || ''}` : ' extdatasrc-plugin-game-details-custom-tag-chip'}`}>
-              <span className="extdatasrc-plugin-game-details-entry-label">{storeTagName(tag)}</span>
-              <Button className="Focusable extdatasrc-plugin-game-details-tag-remove-button"
-                aria-label={getPluginI18nString('clear') + ': ' + storeTagName(tag)} disabled={disabled}
-                onClick={() => onSave(tags.filter(value => value !== tag))}>×</Button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </ListField>
+    <TokenListField label={label} tokens={tags} draft={draft} disabled={disabled}
+      tokenLabel={storeTagName}
+      tokenClassName={tag => typeof tag === 'number' ? 'extdatasrc-plugin-token-store' : ''}
+      onDraft={onDraft} onAdd={add} rememberFocus={rememberFocus}
+      onRemove={tag => onSave(tags.filter(value => value !== tag))}
+      onInputFocus={field => {
+        input.current = field;
+        setAnchor(field.getBoundingClientRect());
+      }}>
+      {renderSuggestions()}
+    </TokenListField>
   );
 }
 
@@ -297,7 +265,6 @@ export function ExternalGameDetails({ appId, manager }: ExternalGameDetailsProps
   const [drafts, setDrafts] = useState({ developer: '', publisher: '', tags: '' });
   const { busy, status, error, run } = useAsyncStatus();
   const focusAfterSave = useRef<HTMLInputElement | null>(null);
-  const styles = usePropertyStyles();
   const styleRef = usePluginStyles();
   const disabled = busy || !loaded;
   const rememberFocus = (input: HTMLInputElement) => { focusAfterSave.current = input; };
@@ -337,29 +304,29 @@ export function ExternalGameDetails({ appId, manager }: ExternalGameDetailsProps
   };
 
   return (
-    <>
-      <div ref={styleRef} className={`${styles.classes?.SectionTopLine || ''} SectionTopLine extdatasrc-plugin-game-details-header`}>
-        <div className={`${styles.classes?.Title || ''} Title`} role="heading" aria-level={3}>
-          {getPluginI18nString('externalGameDetails')}
-        </div>
-      </div>
-      <DialogControlsSection className="extdatasrc-plugin-game-details-date-section">
+    <div ref={styleRef} className="extdatasrc-plugin-group">
+      <DialogControlsSection className="extdatasrc-plugin-section">
+        <DialogControlsSectionHeader>{getPluginI18nString('externalGameDetails')}</DialogControlsSectionHeader>
+
         {(['releaseDate', 'addedToLibraryDate'] as const).map(field => (
           <DateField key={field} label={getPluginI18nString(field)} value={details[field]}
             disabled={disabled} onChange={value => save(field, value)} />
         ))}
+
+        {(['developer', 'publisher'] as const).map(field => (
+          <CompanyNamesField key={field} field={field} names={details[field] || []} draft={drafts[field]}
+            disabled={disabled} rememberFocus={rememberFocus}
+            onDraft={value => setDrafts(previous => ({ ...previous, [field]: value }))}
+            onSave={names => save(field, names)} />
+        ))}
+
+        <StoreTagsField tags={details.tags || []} draft={drafts.tags} disabled={disabled}
+          rememberFocus={rememberFocus}
+          onDraft={value => setDrafts(previous => ({ ...previous, tags: value }))}
+          onSave={(tags, keepDraft) => save('tags', tags, keepDraft)} />
+
+        <StatusMessage status={error ? status : ''} error={error} />
       </DialogControlsSection>
-      {(['developer', 'publisher'] as const).map(field => (
-        <CompanyNamesField key={field} field={field} names={details[field] || []} draft={drafts[field]}
-          disabled={disabled} {...styles} rememberFocus={rememberFocus}
-          onDraft={value => setDrafts(previous => ({ ...previous, [field]: value }))}
-          onSave={names => save(field, names)} />
-      ))}
-      <StoreTagsField tags={details.tags || []} draft={drafts.tags} disabled={disabled}
-        {...styles} rememberFocus={rememberFocus}
-        onDraft={value => setDrafts(previous => ({ ...previous, tags: value }))}
-        onSave={(tags, keepDraft) => save('tags', tags, keepDraft)} />
-      {error && <div role="alert" className="extdatasrc-plugin-form-status-message">{status}</div>}
-    </>
+    </div>
   );
 }

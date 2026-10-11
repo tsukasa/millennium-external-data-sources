@@ -2,6 +2,22 @@ import { steam } from './client';
 
 export type StoreTag = string | number;
 
+/**
+ * Derives a stable negative tag ID for a custom tag name (32-bit FNV-1a).
+ * Steam's tag IDs are positive. Deriving the ID from the name keeps local
+ * library filters pointing at the same tag across restarts.
+ */
+export function localTagId(name: string): number {
+  let hash = 0x811c9dc5;
+
+  for (let index = 0; index < name.length; index++) {
+    hash ^= name.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+
+  return -((hash >>> 1) + 1);
+}
+
 export function storeTagName(tag: StoreTag): string {
   return typeof tag === 'string' ? tag
     : steam().appStore?.GetLocalizationForStoreTag?.(tag)

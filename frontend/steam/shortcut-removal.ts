@@ -4,7 +4,9 @@ import type { FeedManager } from '../feed/manager';
 import type { GameDetailsManager } from '../game-details/manager';
 
 /**
- * Clears configured feed and game detail settings after Steam removes a shortcut.
+ * Clears feed and game detail settings after Steam removes a shortcut.
+ * Both backend calls are idempotent and run even when the managers have not
+ * loaded the settings, so a failed startup load cannot leave settings behind.
  * The removal callback does not wait for the configuration write; failures are logged.
  */
 function onShortcutRemoved(feedManager: FeedManager, gameDetails: GameDetailsManager, [appId]: [number]): void {
@@ -13,15 +15,11 @@ function onShortcutRemoved(feedManager: FeedManager, gameDetails: GameDetailsMan
   if (!isNonSteamId(appId))
     return;
 
-  if (Object.prototype.hasOwnProperty.call(feedManager.sources, appIdString)) {
-    void feedManager.clear(appIdString).catch(error =>
-      console.error(`[External Data Sources] Could not remove feed for ${appIdString}`, error));
-  }
+  void feedManager.clear(appIdString).catch(error =>
+    console.error(`[External Data Sources] Could not remove feed for ${appIdString}`, error));
 
-  if (Object.prototype.hasOwnProperty.call(gameDetails.details, appIdString)) {
-    void gameDetails.clear(appIdString).catch(error =>
-      console.error(`[External Data Sources] Could not remove game details for ${appIdString}`, error));
-  }
+  void gameDetails.clear(appIdString).catch(error =>
+    console.error(`[External Data Sources] Could not remove game details for ${appIdString}`, error));
 }
 
 /** Watches Steam shortcut removals and clears settings for matching AppIds. */

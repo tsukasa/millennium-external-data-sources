@@ -3,7 +3,7 @@ import { POPUP_DESKTOP_CLIENT_ACTIVITY } from '../constants';
 import { findClassModule, findModule, getReactInstance } from 'millennium';
 import { createLibraryLayout, type LayoutRenderer, type SeekTarget, type LayoutClasses } from './library-layout';
 import { steam, type AppOverview } from './client';
-import { discoverNativeNews } from './news-discovery';
+import { discoverNativeNews, NativeNewsUnavailableError, type NativeBindings } from './news-discovery';
 import { registerWhatsNew } from './whats-new';
 import { registerActivityStore } from './activity-store';
 import { registerActivityComponents } from './activity-component-hooks';
@@ -13,13 +13,13 @@ import type { FeedManager } from '../feed/manager';
 interface LayoutContext {
   _currentValue: LayoutRenderer;
   _currentValue2: LayoutRenderer;
-  Provider: unknown
+  Provider: unknown;
 }
 
 interface LayoutInstance {
   GetSections: unknown;
   RegisterSection: unknown;
-  forceUpdate(): void
+  forceUpdate(): void;
 }
 
 interface LayoutPrototype {
@@ -87,9 +87,10 @@ function findBindings(): LayoutBindings | undefined {
  * Refresh an already open desktop page after installing the layout wrapper.
  * This ensures that any changes to the layout are immediately reflected.
  */
-function refreshOpenLayout() {
+function refreshOpenLayout(classes: LayoutClasses) {
   const doc = steam().g_PopupManager?.GetExistingPopup(POPUP_DESKTOP_CLIENT_ACTIVITY)?.window?.document;
-  const anchor = doc?.querySelector('.ColumnContainer, .OhSdLYuggDtBcWjYP0j_9');
+  // Use the discovered class; the unhashed name covers themes that add it.
+  const anchor = doc?.querySelector(`.${classes.ColumnContainer}, .ColumnContainer`);
 
   if (!anchor)
     return;
@@ -107,15 +108,18 @@ function refreshOpenLayout() {
   }
 }
 
-type ReportInstallError = (stage: string, error: unknown) => void;
-
-function installNewsIntegration(feedManager: FeedManager, reportError: ReportInstallError): (() => void) | undefined {
-  let native: ReturnType<typeof discoverNativeNews>;
+/**
+ * Installs the activity integration once Steam's news modules are loaded.
+ * Returns undefined while they are missing; structural mismatches throw.
+ */
+function installNewsIntegration(feedManager: FeedManager): (() => void) | undefined {
+  let native: NativeBindings;
   try {
     native = discoverNativeNews();
   } catch (error) {
-    reportError('Native news discovery', error);
-    return undefined;
+    if (error instanceof NativeNewsUnavailableError)
+      return undefined;
+    throw error;
   }
 
   let unregisterComponents: (() => void) | undefined;
@@ -126,12 +130,11 @@ function installNewsIntegration(feedManager: FeedManager, reportError: ReportIns
   } catch (error) {
     unregisterActivity?.();
     unregisterComponents?.();
-    reportError('Activity installation', error);
-    return undefined;
+    throw error;
   }
 
   // What's New may become available after Activity; retry it independently.
-  const restoreWhatsNew = installWhatsNewIntegration(feedManager, native, reportError);
+  const restoreWhatsNew = installWhatsNewIntegration(feedManager, native);
   return () => {
     restoreWhatsNew();
     unregisterActivity?.();
@@ -139,18 +142,12 @@ function installNewsIntegration(feedManager: FeedManager, reportError: ReportIns
   };
 }
 
-function installWhatsNewIntegration(feedManager: FeedManager, native: ReturnType<typeof discoverNativeNews>,
-  reportError: ReportInstallError): () => void {
+function installWhatsNewIntegration(feedManager: FeedManager, native: NativeBindings): () => void {
   let restore: (() => void) | undefined;
   const stopInstalling = retryInstall(() => {
-    try {
-      restore = registerWhatsNew(feedManager, native);
-      return true;
-    } catch (error) {
-      reportError("What's New installation", error);
-      return false;
-    }
-  }, 500);
+    restore = registerWhatsNew(feedManager, native);
+    return !!restore;
+  }, 500, { name: "What's New installation" });
 
   return () => {
     stopInstalling();
@@ -189,7 +186,7 @@ function installLayoutIntegration(feedManager: FeedManager): (() => void) | unde
     });
     context._currentValue = layout;
     context._currentValue2 = layout2;
-    refreshOpenLayout();
+    refreshOpenLayout(classes);
     return restore;
   } catch (error) {
     restore();
@@ -200,27 +197,15 @@ function installLayoutIntegration(feedManager: FeedManager): (() => void) | unde
 export function registerLibrary(feedManager: FeedManager): () => void {
   let restoreNews: (() => void) | undefined;
   let restoreLayout: (() => void) | undefined;
-  let lastError: string | undefined;
-  const reportError: ReportInstallError = (stage, error) => {
-    const message = String(error);
-    if (message !== lastError)
-      console.error(`[External Data Sources] ${stage} failed:`, error);
-    lastError = message;
-  };
 
   // Steam loads library modules lazily, including on a Big Picture cold start.
   const stopInstalling = retryInstall(() => {
-    restoreNews ||= installNewsIntegration(feedManager, reportError);
+    restoreNews ||= installNewsIntegration(feedManager);
     if (!restoreNews)
       return false;
-    try {
-      restoreLayout = installLayoutIntegration(feedManager);
-      return !!restoreLayout;
-    } catch (error) {
-      reportError('Library layout installation', error);
-      return false;
-    }
-  }, 500);
+    restoreLayout = installLayoutIntegration(feedManager);
+    return !!restoreLayout;
+  }, 500, { name: 'Library installation' });
 
   return () => {
     stopInstalling();

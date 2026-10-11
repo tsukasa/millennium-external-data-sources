@@ -4,14 +4,14 @@ import { getPluginI18nString } from '../i18n';
 type StatusKey = Parameters<typeof getPluginI18nString>[0];
 
 /** Shared feedback for loading and saving settings; ignore results after unmount. */
-export interface AsyncStatus {
+interface AsyncStatus {
   busy: boolean;
   status: string;
   error: boolean;
   run: RunAsyncAction;
 }
 
-export type RunAsyncAction = (action: () => Promise<void>, pending?: StatusKey, success?: StatusKey) => Promise<void>;
+type RunAsyncAction = (action: () => Promise<void>, pending?: StatusKey, success?: StatusKey) => Promise<void>;
 
 /**
  * Custom hook for managing asynchronous action status.
@@ -42,7 +42,8 @@ export function useAsyncStatus(initialStatus?: StatusKey): AsyncStatus {
     } catch (reason) {
       if (isCurrent()) {
         setError(true);
-        setStatus(String(reason));
+        // Show the message alone; "Error: " is a developer-facing prefix.
+        setStatus(reason instanceof Error ? reason.message : String(reason));
       }
     } finally {
       if (isCurrent())

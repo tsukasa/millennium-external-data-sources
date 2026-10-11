@@ -1,9 +1,8 @@
 import type { GameDetails, GameDetailField } from '../../frontend/game-details/manager';
 import type { GlobalFeedSettings } from '../../frontend/feed/types';
-import type { NativeToggleProps, NativeDropdownProps } from '../../frontend/hooks/use-native-controls';
 import { mock } from 'bun:test';
 import { JSDOM } from 'jsdom';
-import { act, Component, createElement as h, type ReactNode, type InputHTMLAttributes } from 'react';
+import { act, createElement as h, type ReactNode, type InputHTMLAttributes } from 'react';
 
 interface MockTextFieldProps extends InputHTMLAttributes<HTMLInputElement> {
   label?: ReactNode;
@@ -12,6 +11,7 @@ interface MockTextFieldProps extends InputHTMLAttributes<HTMLInputElement> {
   mustBeNumeric?: boolean;
   rangeMin?: number;
   rangeMax?: number;
+  bShowClearAction?: boolean;
 }
 interface MockDropdownOption { data: string | number; label: string }
 interface MockDropdownProps {
@@ -20,6 +20,16 @@ interface MockDropdownProps {
   onChange(option: MockDropdownOption): void;
   menuLabel?: string;
   disabled?: boolean;
+}
+interface MockToggleFieldProps {
+  label: ReactNode;
+  checked: boolean;
+  disabled?: boolean;
+  onChange(checked: boolean): void;
+}
+interface MockDropdownItemProps extends MockDropdownProps {
+  label: ReactNode;
+  description?: ReactNode;
 }
 interface MockFieldProps {
   label: ReactNode;
@@ -53,62 +63,72 @@ export const runtime: UIRuntime = {
 };
 
 export const dom = new JSDOM('<body></body>', { url: 'https://steamloopback.host' });
-Object.assign(globalThis, { window: dom.window, document: dom.window.document, DOMParser: dom.window.DOMParser, IS_REACT_ACT_ENVIRONMENT: true });
+Object.assign(globalThis, {
+  window: dom.window, document: dom.window.document, DOMParser: dom.window.DOMParser, IS_REACT_ACT_ENVIRONMENT: true,
+});
 // React's input-event detection needs the browser globals before initialization.
 export const { createRoot } = await import('react-dom/client');
-class NativeToggleField extends Component<NativeToggleProps> {
-  OnToggleChange(value: boolean) { this.props.onChange(value); }
-  render() {
-    const { label, checked, disabled } = this.props;
-    return h('div', { 'data-native-toggle': true }, h('span', null, label),
-      h('button', { type: 'button', role: 'checkbox', 'aria-checked': checked, disabled,
-        onClick: () => this.OnToggleChange(!checked) }));
-  }
-}
-const NativeDropdownField = ({ label, description, rgOptions, selectedOption, disabled, onChange, contextMenuPositionOptions }: NativeDropdownProps) => {
-  const dropDownControlRef = contextMenuPositionOptions?.bMatchWidth;
-  const childrenContainerWidth = 'fixed';
-  return h('div', { 'data-native-dropdown': `${childrenContainerWidth}:${dropDownControlRef}` },
-    h('span', null, label), h('small', null, description), h('select', { value: selectedOption, disabled,
-      onChange: (event: import('react').ChangeEvent<HTMLSelectElement>) => onChange(rgOptions.find(option => option.data === Number(event.target.value))!) },
-      rgOptions.map(option => h('option', { key: option.data, value: option.data }, option.label))));
-};
 export const discoveryDispatcher: Record<string, any> = {};
 mock.module('millennium', () => ({
   definePlugin: (initialize: () => unknown) => initialize,
   findClassModule: (filter: (value: any) => boolean) => runtime.nativeClassCandidates.find(filter),
-  findModule: (filter: (value: any) => boolean) => runtime.libraryModule && filter(runtime.libraryModule) ? runtime.libraryModule : undefined,
+  findModule: (filter: (value: any) => boolean) =>
+    runtime.libraryModule && filter(runtime.libraryModule) ? runtime.libraryModule : undefined,
   getReactInstance: () => undefined,
   applyHookStubs: () => { runtime.savedDispatcher = { ...discoveryDispatcher }; return discoveryDispatcher; },
   removeHookStubs: () => {
     for (const key of Object.keys(discoveryDispatcher)) delete discoveryDispatcher[key];
     Object.assign(discoveryDispatcher, runtime.savedDispatcher);
   },
-  Button: ({ children, ...props }: import('react').ButtonHTMLAttributes<HTMLButtonElement>) => h('button', props, children),
-  DialogControlsSection: ({ children }: { children: ReactNode }) => h('div', { className: 'DialogControlsSection' }, children),
+  Button: ({ children, ...props }: import('react').ButtonHTMLAttributes<HTMLButtonElement>) =>
+    h('button', props, children),
+  DialogButton: ({ children, className, ...props }: import('react').ButtonHTMLAttributes<HTMLButtonElement>) =>
+    h('button', { type: 'button', ...props, className: `${className || ''} DialogButton` }, children),
+  DialogControlsSection: ({ children, className }: { children: ReactNode; className?: string }) =>
+    h('div', { className: `DialogControlsSection ${className || ''}` }, children),
+  DialogControlsSectionHeader: ({ children }: { children: ReactNode }) =>
+    h('div', { className: 'DialogControlsSectionHeader' }, children),
   DialogSubHeader: ({ children }: { children: ReactNode }) => h('div', { className: 'DialogSubHeader' }, children),
-  TextField: ({ label, description, inlineControls, mustBeNumeric: _numeric, rangeMin, rangeMax, ...props }: MockTextFieldProps) => {
+  TextField: ({
+    label, description, inlineControls, mustBeNumeric: _numeric, rangeMin, rangeMax, bShowClearAction, ...props
+  }: MockTextFieldProps) => {
+    // Steam clears through the native value setter and an input event.
+    const clearInput = (event: import('react').MouseEvent<HTMLElement>) => {
+      const input = event.currentTarget.parentElement!.querySelector('input')!;
+      Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value')!.set!.call(input, '');
+      input.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    };
     const contents = h('div', { className: 'DialogInput_Wrapper _DialogLayout' },
-      h('input', { ...props, type: _numeric ? 'number' : 'text', min: rangeMin, max: rangeMax, 'data-steam-text-field': true }), inlineControls);
+      h('input', {
+        ...props, type: _numeric ? 'number' : 'text', min: rangeMin, max: rangeMax, 'data-steam-text-field': true,
+      }),
+      bShowClearAction && props.value && h('div', { className: 'DialogInput_ClearAction', onClick: clearInput }),
+      inlineControls);
     return h('div', { className: label ? 'DialogInputLabelGroup _DialogLayout DialogRequirementLabel' : undefined },
       label && h('div', { className: 'DialogLabel' }, label), contents,
       description && h('div', { className: 'DialogLabelExplainer' }, description));
   },
-  findModuleExport: (filter: (value: unknown) => boolean) =>
-    runtime.nativeModuleCandidates.find(filter) ?? (String(filter).includes('dropDownControlRef') ? NativeDropdownField
-      : filter(NativeToggleField) ? NativeToggleField : undefined),
-  DialogCheckbox: ({ label, checked, disabled, onChange, className }: NativeToggleProps & { className?: string }) =>
+  findModuleExport: (filter: (value: unknown) => boolean) => runtime.nativeModuleCandidates.find(filter),
+  Toggle: ({ value, disabled, onChange }: { value: boolean; disabled?: boolean; onChange(checked: boolean): void }) =>
+    h('button', { type: 'button', role: 'checkbox', 'aria-checked': value, disabled, onClick: () => onChange(!value) }),
+  DialogCheckbox: ({ label, checked, disabled, onChange, className }: MockToggleFieldProps & { className?: string }) =>
     h('label', { className }, h('input', { type: 'checkbox', checked, disabled,
       onChange: (event: import('react').ChangeEvent<HTMLInputElement>) => onChange(event.target.checked) }), label),
-  DropdownItem: (): null => null,
-  Dropdown: ({ rgOptions, selectedOption, onChange, menuLabel, disabled }: MockDropdownProps) => h('select', { 'data-native-dropdown': true, value: selectedOption,
-    'aria-label': menuLabel, disabled,
-    onChange: (event: import('react').ChangeEvent<HTMLSelectElement>) =>
-      onChange(rgOptions.find(option => String(option.data) === event.target.value)!) },
-    rgOptions.map(option => h('option', { key: option.data, value: option.data }, option.label))),
+  DropdownItem: ({ label, description, rgOptions, selectedOption, disabled, onChange }: MockDropdownItemProps) =>
+    h('div', { 'data-native-dropdown': true }, h('span', null, label), h('small', null, description),
+      h('select', { value: selectedOption, disabled,
+        onChange: (event: import('react').ChangeEvent<HTMLSelectElement>) =>
+          onChange(rgOptions.find(option => String(option.data) === event.target.value)!) },
+        rgOptions.map(option => h('option', { key: option.data, value: option.data }, option.label)))),
+  Dropdown: ({ rgOptions, selectedOption, onChange, menuLabel, disabled }: MockDropdownProps) =>
+    h('select', { 'data-native-dropdown': true, value: selectedOption, 'aria-label': menuLabel, disabled,
+      onChange: (event: import('react').ChangeEvent<HTMLSelectElement>) =>
+        onChange(rgOptions.find(option => String(option.data) === event.target.value)!) },
+      rgOptions.map(option => h('option', { key: option.data, value: option.data }, option.label))),
   Field: ({ label, description, children }: MockFieldProps) =>
     h('div', { className: 'Field Background Panel' }, h('div', null, label, h('small', null, description)), children),
-  afterPatch: (object: Record<string, unknown>, property: string, handler: (args: unknown[], result: unknown) => unknown) => {
+  afterPatch: (object: Record<string, unknown>, property: string,
+    handler: (args: unknown[], result: unknown) => unknown) => {
     const original = object[property] as (...args: unknown[]) => unknown;
     object[property] = function(this: unknown, ...args: unknown[]) {
       const result = original.apply(this, args);
@@ -134,7 +154,9 @@ export const { registerWhatsNew } = await import('../../frontend/steam/whats-new
 export const { registerProperties } = await import('../../frontend/steam/properties');
 export const { initI18n, getPluginI18nString } = await import('../../frontend/i18n');
 
-export const id = '3900360037', otherId = '2436693853', url = 'https://example.com/feed';
+export const id = '3900360037';
+export const otherId = '2436693853';
+export const url = 'https://example.com/feed';
 export function installBackend(): void {
   runtime.saved = {};
   runtime.shown = {};
@@ -148,24 +170,44 @@ export function installBackend(): void {
       runtime.globalFeedSettings = { refreshIntervalMinutes, concurrentFetches }; return true;
     },
     // Actual Millennium FFI decodes the backend JSON before returning it.
-    getFeedSources: async () => Object.fromEntries([...new Set([...Object.keys(runtime.saved), ...Object.keys(runtime.shown), ...Object.keys(runtime.maxed)])]
-      .map(key => [key, { url: runtime.saved[key] || '', showFeedInWhatsNew: runtime.shown[key], maxItemsFromFeedInWhatsNew: runtime.maxed[key] }])),
+    getFeedSources: async () => {
+      const keys = new Set([runtime.saved, runtime.shown, runtime.maxed].flatMap(Object.keys));
+      return Object.fromEntries([...keys].map(key => [key, {
+        url: runtime.saved[key] || '',
+        showFeedInWhatsNew: runtime.shown[key],
+        maxItemsFromFeedInWhatsNew: runtime.maxed[key],
+      }]));
+    },
     getFeedRemovedItems: async () => [...runtime.removed],
     getGameDetails: async () => structuredClone(runtime.savedDetails),
     setGameDetail: async (key: string, field: GameDetailField, value: string) => {
       const details = runtime.savedDetails[key] ||= {};
-      const normalized = field === 'developer' || field === 'publisher' || field === 'tags' ? JSON.parse(value) as string[] : value;
+      const isList = field === 'developer' || field === 'publisher' || field === 'tags';
+      const normalized = isList ? JSON.parse(value) as string[] : value;
       if (normalized.length) Object.assign(details, { [field]: normalized });
       else delete details[field];
       if (!Object.keys(details).length) delete runtime.savedDetails[key];
       return true;
     },
     clearGameDetails: async (key: string) => { delete runtime.savedDetails[key]; return true; },
-    addFeedRemovedItem: async (articleUrl: string) => { if (!runtime.removed.includes(articleUrl)) runtime.removed.push(articleUrl); return true; },
-    saveFeedSource: async (key: string, value: string, showInWhatsNew: boolean) => { if (value.includes('fail')) throw new Error('disk error'); runtime.saved[key] = value; runtime.shown[key] = showInWhatsNew; return true; },
+    addFeedRemovedItem: async (articleUrl: string) => {
+      if (!runtime.removed.includes(articleUrl)) runtime.removed.push(articleUrl);
+      return true;
+    },
+    saveFeedSource: async (key: string, value: string, showInWhatsNew: boolean) => {
+      if (value.includes('fail')) throw new Error('disk error');
+      runtime.saved[key] = value;
+      runtime.shown[key] = showInWhatsNew;
+      return true;
+    },
     setShowFeedInWhatsNew: async (key: string, value: boolean) => { runtime.shown[key] = value; return true; },
     setMaxItemsFromFeedInWhatsNew: async (key: string, value: number) => { runtime.maxed[key] = value; return true; },
-    clearFeedSource: async (key: string) => { delete runtime.saved[key]; delete runtime.shown[key]; delete runtime.maxed[key]; return true; },
+    clearFeedSource: async (key: string) => {
+      delete runtime.saved[key];
+      delete runtime.shown[key];
+      delete runtime.maxed[key];
+      return true;
+    },
     fetchFeed: async () => JSON.stringify({ url, xml: '<rss><channel><item><title>Update</title><link>https://example.com/update</link></item></channel></rss>' }),
   } });
 }

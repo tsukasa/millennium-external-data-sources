@@ -17,7 +17,7 @@ export interface NativeEventModel {
   GetStartTimeAndDateUnixSeconds?(): number;
 }
 
-export interface NativeEventData {
+interface NativeEventData {
   localized_summary: string[];
   localized_capsule_image: string[];
 }
@@ -40,7 +40,7 @@ export interface NativeActivityEventConstructor {
   new(time: number, clan: unknown, gid: string, posted: number, appId: string): NativeActivityEvent;
 }
 
-export interface ObservableEvents extends Array<NativeActivityEvent> {
+interface ObservableEvents extends Array<NativeActivityEvent> {
   replace?(events: NativeActivityEvent[]): void;
 }
 
@@ -74,7 +74,7 @@ export interface NativeActivityProps {
   event?: NativeActivityEvent;
 }
 
-export interface ReactFiber {
+interface ReactFiber {
   child?: ReactFiber | null;
   return?: ReactFiber | null;
   stateNode?: unknown;
