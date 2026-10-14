@@ -334,7 +334,7 @@ async function setupShortcutFilters(binding: string) {
   const previousCollections = (window as any).collectionStore;
   const previousClient = globalThis.SteamClient;
   const previousModules = runtime.nativeModuleCandidates;
-  const previousLibraryModule = runtime.libraryModule;
+  const previousJsxRuntime = window.SP_JSX_FACTORY;
   const jsxRuntime = {
     Fragment: Symbol.for('react.fragment'),
     jsx(_type: unknown, props: { collection?: { id: string }; ignoreFiltering?: boolean }) {
@@ -344,7 +344,7 @@ async function setupShortcutFilters(binding: string) {
       return { $$typeof: Symbol.for('react.transitional.element'), props };
     },
   };
-  runtime.libraryModule = jsxRuntime;
+  window.SP_JSX_FACTORY = jsxRuntime;
   runtime.nativeModuleCandidates = [...previousModules, Filter];
   const notifications = new Set<() => void>();
   Object.assign(globalThis, { SteamClient: { ...previousClient, Apps: {
@@ -361,7 +361,7 @@ async function setupShortcutFilters(binding: string) {
       cleanup();
       expect(new Filter().GetTagsString()).toBe('?tags=19,-1');
       runtime.nativeModuleCandidates = previousModules;
-      runtime.libraryModule = previousLibraryModule;
+      window.SP_JSX_FACTORY = previousJsxRuntime;
       const grid = jsxRuntime.jsx(null, { collection: { id: 'deck-desktop-apps' }, ignoreFiltering: true });
       expect(grid.props.ignoreFiltering).toBe(true);
       expect(matches.size).toBe(0);

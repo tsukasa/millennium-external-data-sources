@@ -9,6 +9,7 @@ import { registerGameDetails } from './steam/game-details-store';
 import { registerShortcutRemoval } from './steam/shortcut-removal';
 import { PluginConfiguration } from './components/plugin-configuration';
 import PluginIcon from './plugin-icon';
+import { log } from './logger';
 
 /** Startup loads retried in the background, e.g. while Millennium's backend starts. */
 const LOAD_ATTEMPTS = 5;
@@ -29,7 +30,7 @@ export default definePlugin(async () => {
     try {
       cleanups.push(install());
     } catch (error) {
-      console.error(`[External Data Sources] ${name} initialization failed`, error);
+      log.error(`${name} initialization failed`, error);
     }
   };
 
@@ -48,7 +49,7 @@ export default definePlugin(async () => {
         if (!pluginStopped)
           onLoaded();
       }, error => {
-        console.error(`[External Data Sources] Could not load ${name}`, error);
+        log.error(`Could not load ${name}`, error);
 
         if (pluginStopped || failures + 1 >= LOAD_ATTEMPTS)
           return;
@@ -78,7 +79,7 @@ export default definePlugin(async () => {
       ? undefined
       : loadWithRetry('configuration', () => feedManager.load(),
         () => feedManager.startBackgroundRefresh(activeAppId())))
-    .catch(error => console.error('[External Data Sources] Could not start background refresh', error));
+    .catch(error => log.error('Could not start background refresh', error));
 
   // UI hooks subscribe to the managers and can be installed while data is loading.
   const initializationTimer = setInterval(() => {
@@ -109,7 +110,7 @@ export default definePlugin(async () => {
         try {
           currentCleanupFunc();
         } catch (error) {
-          console.error('[External Data Sources] Cleanup failed', error);
+          log.error('Cleanup failed', error);
         }
       }
 

@@ -1,3 +1,5 @@
+import { log } from './logger';
+
 /**
  * Calls every listener, even when an earlier one throws.
  * Listeners reach into Steam's private stores; one failing integration must not
@@ -9,7 +11,7 @@ export function notifyListeners<Args extends unknown[]>(listeners: Iterable<(...
     try {
       listener(...args);
     } catch (error) {
-      console.error('[External Data Sources] Listener failed', error);
+      log.error('Listener failed', error);
     }
   }
 }

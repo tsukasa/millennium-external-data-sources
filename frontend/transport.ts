@@ -1,3 +1,5 @@
+import { log } from './logger';
+
 /**
  * Decodes a response from the Steam client, handling both JSON strings and already-parsed objects.
  * Millennium's live FFI deserializes JSON return strings; test/legacy transports may leave them encoded.
@@ -16,7 +18,7 @@ export async function backendWrite(write: () => Promise<boolean>, message: strin
   try {
     saved = await write();
   } catch (error) {
-    console.error(`[External Data Sources] ${message}`, error);
+    log.error(message, error);
     throw new Error(message, { cause: error });
   }
 

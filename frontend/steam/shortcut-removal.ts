@@ -2,6 +2,7 @@ import { afterPatch } from 'millennium';
 import { isNonSteamId } from './client';
 import type { FeedManager } from '../feed/manager';
 import type { GameDetailsManager } from '../game-details/manager';
+import { log } from '../logger';
 
 /**
  * Clears feed and game detail settings after Steam removes a shortcut.
@@ -16,10 +17,10 @@ function onShortcutRemoved(feedManager: FeedManager, gameDetails: GameDetailsMan
     return;
 
   void feedManager.clear(appIdString).catch(error =>
-    console.error(`[External Data Sources] Could not remove feed for ${appIdString}`, error));
+    log.error(`Could not remove feed for ${appIdString}`, error));
 
   void gameDetails.clear(appIdString).catch(error =>
-    console.error(`[External Data Sources] Could not remove game details for ${appIdString}`, error));
+    log.error(`Could not remove game details for ${appIdString}`, error));
 }
 
 /** Watches Steam shortcut removals and clears settings for matching AppIds. */

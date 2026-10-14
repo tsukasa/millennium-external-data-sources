@@ -1,5 +1,5 @@
 import { retryInstall } from './retry-install';
-import { findModule, findModuleExport } from 'millennium';
+import { findModuleExport } from 'millennium';
 import {
   isNonSteamId, steam, type AppOverview, type AppData, type AssociationData, type LibraryFilter, type SteamCollection
 } from './client';
@@ -7,6 +7,7 @@ import { MethodHooks } from './method-hooks';
 import { localTagId, PLAYER_TAG_CATEGORIES } from './store-tags';
 import type { GameDetailsManager, GameDetails } from '../game-details/manager';
 import type { CalendarDate } from '../game-details/calendar-date';
+import { log } from '../logger';
 
 type AppOverviewChangeCallback = Parameters<typeof SteamClient.Apps.RegisterForAppOverviewChanges>[0];
 
@@ -180,12 +181,11 @@ function registerCompanyAssociations(manager: GameDetailsManager): () => void {
 }
 
 function installBigPictureFilters(hooks: MethodHooks): void {
-  const jsxRuntime = findModule(value => typeof value?.jsx === 'function'
-    && typeof value.jsxs === 'function' && value.Fragment
-    && value.jsx('span', {}).$$typeof === Symbol.for('react.transitional.element')) as {
-      jsx(type: unknown, props: { collection?: { id: string }; ignoreFiltering?: boolean }, key?: unknown): unknown;
-      jsxs(type: unknown, props: { collection?: { id: string }; ignoreFiltering?: boolean }, key?: unknown): unknown;
-    } | undefined;
+  // Millennium exposes Steam's own JSX runtime; Steam reads `jsx`/`jsxs` from it on every render.
+  const jsxRuntime = window.SP_JSX_FACTORY as {
+    jsx(type: unknown, props: { collection?: { id: string }; ignoreFiltering?: boolean }, key?: unknown): unknown;
+    jsxs(type: unknown, props: { collection?: { id: string }; ignoreFiltering?: boolean }, key?: unknown): unknown;
+  } | undefined;
 
   if (jsxRuntime) {
     // Big Picture explicitly bypasses filters for its Non-Steam grid.
@@ -416,7 +416,7 @@ function registerOverviewDetails(manager: GameDetailsManager): () => void {
       try {
         sync();
       } catch (error) {
-        console.error('[External Data Sources] Could not apply game details:', error);
+        log.error('Could not apply game details:', error);
       }
     };
 

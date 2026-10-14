@@ -3,7 +3,7 @@ import type { FeedManager } from '../feed/manager';
 import type { NativeBindings } from './news-discovery';
 import { isNonSteamId } from './client';
 import { MethodHooks } from './method-hooks';
-import { findModuleExport } from 'millennium';
+import { findInTree, findModuleExport } from 'millennium';
 import { EXTERNAL_NEWS_PREFIX } from '../constants';
 import { activityImageCss } from '../styles';
 
@@ -25,10 +25,9 @@ const isElement = (node: unknown): node is HTMLElement =>
 
 /** Get the DOM element corresponding to a React ActivityComponent instance. */
 function elementFor(instance: ActivityComponent): HTMLElement | undefined {
-  let fiber = instance._reactInternals?.child;
-  while (fiber && !isElement(fiber.stateNode))
-    fiber = fiber.child;
-  return fiber?.stateNode as HTMLElement | undefined;
+  const host = findInTree(instance._reactInternals?.child, fiber => isElement(fiber.stateNode),
+    { walkable: ['child'] });
+  return host?.stateNode as HTMLElement | undefined;
 }
 
 /** Remove posting controls and disable Steam actions on native feed cards. */
@@ -123,14 +122,12 @@ export function registerActivityComponents(feedManager: FeedManager, native: Nat
 
     hooks.wrap(postProto, 'render', (original, instance) => {
       // The text entry has no appid; find its native Activity parent in either UI.
-      for (let fiber = instance._reactInternals; fiber; fiber = fiber.return) {
+      const activity = findInTree(instance._reactInternals, fiber => {
         const appId = fiber.pendingProps?.appid ?? fiber.memoizedProps?.appid;
+        return appId !== undefined && configured(Number(appId));
+      }, { walkable: ['return'] });
 
-        if (appId !== undefined && configured(Number(appId)))
-          return null;
-      }
-
-      return original();
+      return activity ? null : original();
     });
 
     hooks.wrap(sectionProto, 'OnPostStatusClicked', (original, instance) =>
@@ -152,12 +149,16 @@ export function registerActivityComponents(feedManager: FeedManager, native: Nat
       });
     }
 
+    // Newer builds load votes in an observer wrapper; only guard actions the class still has.
     for (const name of [
       'LoadMyVoteInformation',
       'OnRateUpClicked',
       'OnRateDownClicked',
       'ShowOptionsContextMenu',
       'OnViewThread'] as const) {
+      // `in` reads no property, so Steam's lazy `@bind` getters stay untouched.
+      if (!(name in announcementProto))
+        continue;
       hooks.wrap(announcementProto, name, (original, instance) =>
         instance.props.event?.externalNewsItem ? undefined : original());
     }

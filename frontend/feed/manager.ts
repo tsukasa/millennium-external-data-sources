@@ -9,6 +9,7 @@ import {
   EXTERNAL_NEWS_DEFAULT_CONCURRENT_FETCHES
 } from '../constants';
 import type { FeedSourceSettings, FeedSourceSettingsByAppId, GlobalFeedSettings } from './types';
+import { log } from '../logger';
 
 export class FeedManager {
   revision = 0;
@@ -27,7 +28,7 @@ export class FeedManager {
   private failedRefreshes = new Map<string, number>();
 
   readonly cache = new FeedCache(id => backend.fetchFeed(id), Date.now, ({ appId, durationMs, itemCount }) => {
-    console.info(`[External Data Sources] Parsed feed for ${appId}: ${itemCount} items in ${durationMs.toFixed(1)} ms`);
+    log.info(`Parsed feed for ${appId}: ${itemCount} items in ${durationMs.toFixed(1)} ms`);
   });
 
   load(): Promise<void> {
@@ -312,7 +313,7 @@ export class FeedManager {
     this.removalWrite = write.catch(error => {
       this.feedRemovedItems.delete(url);
       this.notify();
-      console.error('[External Data Sources] Could not save removed feed item:', error);
+      log.error('Could not save removed feed item:', error);
     });
 
     return this.removalWrite;

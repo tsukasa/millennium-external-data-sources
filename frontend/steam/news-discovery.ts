@@ -1,4 +1,4 @@
-import { applyHookStubs, findModuleExport, removeHookStubs } from 'millennium';
+import { applyHookStubs, findInReactTree, findModuleExport, removeHookStubs } from 'millennium';
 import type {
   ActivityComponent, NativeActivityProps, NativeEventModelConstructor, NativeActivityEventConstructor, QueryDataClient
 } from './news-types';
@@ -27,45 +27,52 @@ export interface NativeBindings {
 /** Steam has not loaded the modules yet; discovery can be retried cheaply. */
 export class NativeNewsUnavailableError extends Error {}
 
-/** Recursively search a React element tree for a node that matches the given predicate. */
-function findElement(tree: any, predicate: (node: any) => boolean): any {
-  if (Array.isArray(tree)) {
-    for (const child of tree) {
-      const found = findElement(child, predicate);
+/** Upper bound for components rendered while searching a card for its image query. */
+const MAX_CARD_RENDERS = 400;
 
-      if (found)
-        return found;
-    }
-  } else if (tree?.props) {
-    if (predicate(tree))
-      return tree;
-
-    return findElement(tree.props.children, predicate);
-  }
-
-  return undefined;
-}
+/** Upper bound for wrappers (observers, memo) around the announcement class. */
+const MAX_ANNOUNCEMENT_WRAPPERS = 5;
 
 /**
- * Require a React element that matches the given predicate.
- * Throws an error if no matching element is found.
+ * Require a React element in the tree that matches the given predicate.
+ * Throws an error naming the missing element, so logs show which step changed.
  */
-function requireElement(tree: any, predicate: (node: any) => boolean) {
-  const element = findElement(tree, predicate);
+function requireElement(tree: any, description: string, predicate: (props: any) => boolean) {
+  // Millennium's search also visits props objects and arrays; only elements qualify.
+  const element = findInReactTree(tree, node => !!node?.type && !!node.props && predicate(node.props));
 
   if (!element)
-    throw new Error('Steam activity component structure changed');
+    throw new Error(`Steam activity component structure changed: ${description} not found`);
 
   return element;
 }
 
-/** Render a React element to its output. */
-function render(element: any): any {
-  const type = element.type.type || element.type;
+/** The component behind memo and forwardRef wrappers. */
+function componentType(element: any): any {
+  const type = element.type;
+  return typeof type === 'object' && type !== null && type.type ? type.type : type;
+}
 
-  return type.prototype?.render
-    ? new type(element.props).render()
-    : type(element.props);
+/** Render a React element to its output. */
+function render(element: any, prepare?: (instance: any) => void): any {
+  const type = componentType(element);
+
+  if (type.prototype?.render) {
+    const instance = new type(element.props);
+    prepare?.(instance);
+    return instance.render();
+  }
+
+  // forwardRef components keep their render function on the wrapper object.
+  return typeof type === 'function'
+    ? type(element.props)
+    : type.render(element.props, null);
+}
+
+/** Whether an element is a component that can be rendered without mounting. */
+function isComponent(element: any): boolean {
+  const type = element && typeof element === 'object' && element.props ? componentType(element) : undefined;
+  return typeof type === 'function' || typeof type?.render === 'function';
 }
 
 /** Find Steam modules by behavior instead of build-specific names or IDs. */
@@ -136,22 +143,41 @@ function createProbe(EventModel: NativeEventModelConstructor, ActivityEvent: Nat
   };
 }
 
-function installProbeHookStubs(client: any): () => void {
-  // Router hooks and QueryClient hooks have undefined defaults outside a render.
-  const context = new Proxy(client, {
+/**
+ * Lazy-render boundaries (`{ enabled }`) only show their children once scrolled into view.
+ * An unmounted probe is never visible, so it renders them eagerly.
+ */
+const isLazyRenderContext = (value: any) => !!value && typeof value === 'object'
+  && Object.getPrototypeOf(value) === Object.prototype && typeof value.enabled === 'boolean';
+
+/** Stand-in for contexts whose default is undefined because no provider is mounted. */
+function createProviderStandIn(client: any) {
+  return new Proxy(client, {
     get(target, key) {
+      // Router hooks.
       if (key === 'location')
         return { state: {}, pathname: '/library/home' };
 
       if (key === 'history')
         return { location: { state: {} } };
 
-      return typeof target[key] === 'function'
-        ? target[key].bind(target)
-        : target[key];
+      if (key in target) {
+        const value = target[key];
+        return typeof value === 'function' ? value.bind(target) : value;
+      }
+
+      // Service providers expose hooks such as `useActiveSteamInterface`; without
+      // a mounted provider there is no service, and the probe must not reach one.
+      if (typeof key === 'string' && /^use[A-Z]/.test(key))
+        return () => undefined;
+
+      return undefined;
     }
   });
+}
 
+function installProbeHookStubs(client: any): () => void {
+  const standIn = createProviderStandIn(client);
   const refs: any[] = [];
   const observers: any[] = [];
   let dispatcher: any;
@@ -181,9 +207,21 @@ function installProbeHookStubs(client: any): () => void {
         return ref;
       },
 
-      useContext: (value: any) => value._currentValue?.getQueryCache
-        ? client
-        : value._currentValue ?? context,
+      useContext: (value: any) => {
+        const current = value._currentValue;
+
+        if (current?.getQueryCache)
+          return client;
+
+        // Only undefined defaults lack a provider; null is a valid default
+        // (e.g. gamepad navigation outside a focus tree).
+        if (current === undefined)
+          return standIn;
+
+        return isLazyRenderContext(current)
+          ? { ...current, enabled: false }
+          : current;
+      },
 
       useMemo: (fn: () => any) => fn(),
 
@@ -231,59 +269,105 @@ function inspectActivityTree(Activity: any, day: any, event: any) {
 
   const sectionTree = render(section);
 
-  const postTextEntry = requireElement(sectionTree, node =>
-    typeof node.props.OnPostClicked === 'function' && typeof node.props.placeholder === 'string');
+  const postTextEntry = requireElement(sectionTree, 'post text entry', props =>
+    typeof props.OnPostClicked === 'function' && typeof props.placeholder === 'string');
 
-  const feed = requireElement(sectionTree, node => typeof node.props.ShowMoreContent === 'function');
+  const feed = requireElement(sectionTree, 'activity feed', props => typeof props.ShowMoreContent === 'function');
 
-  const days = requireElement(render(feed), node => node.props.rgDays);
+  const days = requireElement(render(feed), 'day list', props => props.rgDays);
 
-  const dayWrapper = requireElement(render(days), node => node.props.day === day);
+  const dayWrapper = requireElement(render(days), 'probe day', props => props.day === day);
 
   const dayElement = render(dayWrapper);
 
-  const eventWrapper = requireElement(render(dayElement), node => node.props.event === event);
+  const eventWrapper = requireElement(render(dayElement), 'probe event', props => props.event === event);
 
-  const announcement = render(eventWrapper);
+  // Steam wraps the announcement class in observers that supply its votes;
+  // its actions and lifecycle live on the class.
+  let announcement = render(eventWrapper);
+  for (let wrappers = 0; !componentType(announcement)?.prototype?.render; wrappers++) {
+    if (wrappers >= MAX_ANNOUNCEMENT_WRAPPERS)
+      throw new Error('Steam activity component structure changed: announcement class not found');
+    announcement = requireElement(render(announcement), 'announcement', props => props.event === event);
+  }
 
-  const announcementTree = render(announcement);
-
-  const loader = requireElement(announcementTree, node => node.props.event === event);
+  const card = requireElement(render(announcement), 'event card', props => props.event === event);
 
   return {
     section,
     postTextEntry,
     announcement,
-    loader
+    card
   };
 }
 
-/**
- * Inspect the image query for a given loader without mounting it.
- * Render the card only to discover its image query; never mount its loader.
- */
-function inspectImageQuery(loader: any, model: any) {
-  const loaderInstance = new loader.type(loader.props);
-  loaderInstance.m_ldrEvent = { state: 'fulfilled', value: model };
-  render(loaderInstance.render());
-}
-
 /** Find the image query key for a given probe GID. */
-function findImageQueryKey(client: any, probeGid: string) {
-  const imageQueryKey = client
+function findImageQueryKey(client: any, probeGid: string): unknown[] | undefined {
+  return client
     .getQueryCache()
     .getAll()
     .map((query: any) => query.queryKey as unknown[])
     .find((key: unknown[]) => key.includes(probeGid) && key.includes('capsule'));
+}
 
-  // Gives you two pairs of <image>:<language> in the query key.
-  // We're interested in the "fallback" at the very end.
-  const language = imageQueryKey?.[3];
+/**
+ * Render the card until its image query appears; never mount it.
+ * Steam wraps the event loader in focus and lazy-render boundaries whose depth
+ * changes between builds, so the card is searched instead of rendered at a fixed level.
+ * Every loader (`m_ldrEvent`) on the way resolves to the probe model without fetching.
+ */
+function inspectImageQuery(card: any, model: any, client: any, probeGid: string): unknown[] {
+  // Each pending node records whether it renders inside a resolved event loader.
+  const pending: [node: any, inLoader: boolean][] = [[card, false]];
+  let branchError: unknown;
+  let loaderError: unknown;
+  let renders = 0;
 
-  if (!imageQueryKey || typeof language !== 'number')
-    throw new Error('Steam news image query changed');
+  while (pending.length && renders < MAX_CARD_RENDERS) {
+    const [node, inLoader] = pending.pop()!;
 
-  return { imageQueryKey, language };
+    if (Array.isArray(node)) {
+      for (const child of [...node].reverse())
+        pending.push([child, inLoader]);
+      continue;
+    }
+
+    if (!node || typeof node !== 'object' || !node.props)
+      continue;
+
+    if (!isComponent(node)) {
+      pending.push([node.props.children, inLoader]);
+      continue;
+    }
+
+    let isLoader = false;
+    renders++;
+    try {
+      const output = render(node, instance => {
+        isLoader = 'm_ldrEvent' in instance;
+        if (isLoader)
+          instance.m_ldrEvent = { state: 'fulfilled', value: model };
+      });
+      pending.push([output, inLoader || isLoader]);
+    } catch (error) {
+      // Unrelated branches (ratings, menus) may need providers the probe lacks;
+      // a failure below the event loader is the one that explains a missing query.
+      if (inLoader || isLoader)
+        loaderError ??= error;
+      else
+        branchError ??= error;
+      continue;
+    }
+
+    const imageQueryKey = findImageQueryKey(client, probeGid);
+    if (imageQueryKey)
+      return imageQueryKey;
+  }
+
+  if (loaderError ?? branchError)
+    throw loaderError ?? branchError;
+
+  throw new Error(`Steam news image query changed: no capsule query after ${renders} renders`);
 }
 
 /**
@@ -296,11 +380,15 @@ export function discoverNativeNews(): NativeBindings {
   const { probeGid, model, event, day, activity } = createProbe(EventModel, ActivityEvent);
 
   return withProbeEnvironment(store, client, activity, () => {
-    const { section, postTextEntry, announcement, loader } = inspectActivityTree(Activity, day, event);
+    const { section, postTextEntry, announcement, card } = inspectActivityTree(Activity, day, event);
 
-    inspectImageQuery(loader, model);
+    const imageQueryKey = inspectImageQuery(card, model, client, probeGid);
 
-    const { imageQueryKey, language } = findImageQueryKey(client, probeGid);
+    // The key holds <image>:<language> pairs; the fallback's language comes first.
+    const language = imageQueryKey[3];
+
+    if (typeof language !== 'number')
+      throw new Error(`Steam news image query changed: ${JSON.stringify(imageQueryKey)}`);
 
     return {
       Section: section.type,

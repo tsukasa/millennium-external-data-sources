@@ -1,5 +1,5 @@
 import { beforeEach, expect, test } from 'bun:test';
-import { act, Component, useLayoutEffect, createElement as h } from 'react';
+import { act, Component, forwardRef, memo, useLayoutEffect, createElement as h } from 'react';
 import { createRoot } from './helpers/ui-runtime';
 import type { LayoutProps, SeekTarget } from '../frontend/steam/library-layout';
 import {
@@ -133,26 +133,50 @@ test('discovery needs only live bindings, restores its environment and installs 
     IsEventLoaded() { return false; }
     ReloadEvent() { throw new Error('Discovery must not fetch'); }
   }
+  // Contexts without a mounted provider: a service transport (undefined default),
+  // gamepad navigation (null default) and lazy rendering until visible.
+  const transportContext = { _currentValue: undefined };
+  const navigationContext = { _currentValue: null };
+  const lazyContext = { _currentValue: { enabled: true } };
   function Card({ event }: any) {
     const client = discoveryDispatcher.useContext({ _currentValue: shared });
     discoveryDispatcher.useRef({ reaction: { dispose() { disposedResources++; } } });
     discoveryDispatcher.useState({ getOptimisticResult() {}, destroy() { disposedResources++; } });
+    // Voting reads its service from a provider; unmounted, there is none.
+    expect(discoveryDispatcher.useContext(transportContext).useActiveSteamInterface()).toBeUndefined();
     if (broken) throw new Error('Card structure changed');
     client.setQueryData(['image', event.GID, 'capsule', 7], []);
     // No Rating, Summary, Visibility or QueryProvider is required.
     return h('div');
   }
   class Loader extends Component<any> {
-    m_ldrEvent?: { state: string; value: EventModel };
+    m_ldrEvent: { state: string; value?: EventModel } | null = null;
     render() {
       if (this.m_ldrEvent?.state !== 'fulfilled') throw new Error('Discovery must bypass loading');
       return h(Card, { event: this.m_ldrEvent.value });
     }
   }
-  class Announcement extends Component<any> {
-    render() { return h(Loader, { event: this.props.event }); }
+  function Focusable({ children }: any) {
+    const parent = discoveryDispatcher.useContext(navigationContext);
+    // Steam only creates a navigation node inside a focus tree.
+    parent?.Tree.CreateNode();
+    return h('div', null, children);
   }
-  const EventWrapper = ({ event }: any) => h(Announcement, { event });
+  function LazyRender({ children }: any) {
+    const { enabled } = discoveryDispatcher.useContext(lazyContext);
+    const [state] = discoveryDispatcher.useState(() => ({ bRenderChildren: !enabled }));
+    return h('div', null, state.bRenderChildren ? children : null);
+  }
+  const Rating = () => { throw new Error('Unrelated branch needs a provider'); };
+  const Frame = forwardRef(({ event }: any, _ref) =>
+    h('div', null, h(Rating), h(LazyRender, null, h(Focusable, null, h(Loader, { event })))));
+  const CardWrapper = memo(({ event }: any) => h(Focusable, null, h(Frame, { event })));
+  class Announcement extends Component<any> {
+    render() { return h(CardWrapper, { event: this.props.event }); }
+  }
+  // Steam supplies votes through an observer around the announcement class.
+  const VotingAnnouncement = memo(({ event }: any) => h(Announcement, { event, myVote: null, Vote() {} }));
+  const EventWrapper = ({ event }: any) => h(VotingAnnouncement, { event });
   const Day = ({ day }: any) => h('div', null, h(EventWrapper, { event: day.events[0] }));
   const DayWrapper = ({ day }: any) => h(Day, { day });
   const Days = ({ rgDays }: any) => h('div', null, h(DayWrapper, { day: rgDays[0] }));

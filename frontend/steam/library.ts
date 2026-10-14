@@ -1,6 +1,6 @@
 import { retryInstall } from './retry-install';
 import { POPUP_DESKTOP_CLIENT_ACTIVITY } from '../constants';
-import { findClassModule, findModule, getReactInstance } from 'millennium';
+import { findClassModule, findInTree, findModuleDetailsByExport, getReactInstance } from 'millennium';
 import { createLibraryLayout, type LayoutRenderer, type SeekTarget, type LayoutClasses } from './library-layout';
 import { steam, type AppOverview } from './client';
 import { discoverNativeNews, NativeNewsUnavailableError, type NativeBindings } from './news-discovery';
@@ -9,6 +9,7 @@ import { registerActivityStore } from './activity-store';
 import { registerActivityComponents } from './activity-component-hooks';
 import { MethodHooks } from './method-hooks';
 import type { FeedManager } from '../feed/manager';
+import { log } from '../logger';
 
 interface LayoutContext {
   _currentValue: LayoutRenderer;
@@ -42,18 +43,14 @@ interface LayoutBindings {
  * Discover by component capabilities, never by build-specific webpack IDs.
  */
 function findBindings(): LayoutBindings | undefined {
-  const module = findModule(exports => exports && Object.values(exports).some((value: any) =>
-    value?.prototype?.GetSections && value?.prototype?.RegisterSection && value?.prototype?.SeekToSection)
-  );
+  const [module, layoutClass] = findModuleDetailsByExport(value => value?.prototype?.GetSections
+    && value.prototype.RegisterSection
+    && value.prototype.SeekToSection) as [Record<string, unknown> | undefined, LayoutClass | undefined, ...unknown[]];
 
   if (!module)
     return undefined;
 
   const values = Object.values(module) as any[];
-  const layoutClass = values.find(value => value?.prototype?.GetSections
-    && value?.prototype?.RegisterSection
-    && value?.prototype?.SeekToSection
-  ) as LayoutClass | undefined;
   const context = values.find(value => value?.Provider
     && typeof value._currentValue === 'function'
   ) as LayoutContext | undefined;
@@ -95,30 +92,28 @@ function refreshOpenLayout(classes: LayoutClasses) {
   if (!anchor)
     return;
 
-  let fiber = getReactInstance(anchor);
-
-  while (fiber) {
+  const layout = findInTree(getReactInstance(anchor), fiber => {
     const instance = fiber.stateNode as LayoutInstance | undefined;
+    return !!instance?.GetSections && !!instance.RegisterSection && typeof instance.forceUpdate === 'function';
+  }, { walkable: ['return'] });
 
-    if (instance?.GetSections && instance.RegisterSection && typeof instance.forceUpdate === 'function') {
-      instance.forceUpdate();
-      return;
-    }
-    fiber = fiber.return;
-  }
+  (layout?.stateNode as LayoutInstance | undefined)?.forceUpdate();
 }
 
 /**
  * Installs the activity integration once Steam's news modules are loaded.
  * Returns undefined while they are missing; structural mismatches throw.
  */
-function installNewsIntegration(feedManager: FeedManager): (() => void) | undefined {
+function installNewsIntegration(feedManager: FeedManager,
+  reportUnavailable: (reason: string) => void): (() => void) | undefined {
   let native: NativeBindings;
   try {
     native = discoverNativeNews();
   } catch (error) {
-    if (error instanceof NativeNewsUnavailableError)
+    if (error instanceof NativeNewsUnavailableError) {
+      reportUnavailable(error.message);
       return undefined;
+    }
     throw error;
   }
 
@@ -197,10 +192,18 @@ function installLayoutIntegration(feedManager: FeedManager): (() => void) | unde
 export function registerLibrary(feedManager: FeedManager): () => void {
   let restoreNews: (() => void) | undefined;
   let restoreLayout: (() => void) | undefined;
+  let lastUnavailable: string | undefined;
+
+  // Missing modules are polled; report each distinct reason once.
+  const reportUnavailable = (reason: string) => {
+    if (reason !== lastUnavailable)
+      log.debug(`Waiting for Steam: ${reason}`);
+    lastUnavailable = reason;
+  };
 
   // Steam loads library modules lazily, including on a Big Picture cold start.
   const stopInstalling = retryInstall(() => {
-    restoreNews ||= installNewsIntegration(feedManager);
+    restoreNews ||= installNewsIntegration(feedManager, reportUnavailable);
     if (!restoreNews)
       return false;
     restoreLayout = installLayoutIntegration(feedManager);

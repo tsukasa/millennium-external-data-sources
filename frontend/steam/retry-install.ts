@@ -1,3 +1,5 @@
+import { log } from '../logger';
+
 interface RetryInstallOptions {
   /** Integration name used in log messages. */
   name?: string;
@@ -27,18 +29,23 @@ export function retryInstall(install: () => boolean, intervalMs: number,
     let delay = intervalMs;
 
     try {
-      if (install())
+      if (install()) {
+        if (failures)
+          log.info(`${name} succeeded after ${failures} failed attempts`);
+        else
+          log.debug(`${name} succeeded`);
         return;
+      }
     } catch (error) {
       failures++;
 
       const message = String(error);
       if (message !== lastMessage)
-        console.error(`[External Data Sources] ${name} failed:`, error);
+        log.error(`${name} failed:`, error);
       lastMessage = message;
 
       if (failures >= maxFailures) {
-        console.error(`[External Data Sources] ${name} stopped after ${failures} failed attempts`);
+        log.error(`${name} stopped after ${failures} failed attempts`);
         return;
       }
 

@@ -89,3 +89,36 @@ test('native activity controls are removed, actions disabled and later plugin wr
     feedManager.dispose();
   }
 });
+
+test('announcement classes without vote loading keep their own method set', () => {
+  // Newer builds load votes in an observer wrapper; the class has no LoadMyVoteInformation.
+  class Announcement extends Component<any> {
+    OnRateUpClicked() {}
+    render() { return h('div'); }
+  }
+  class Section extends Component<any> {
+    render() { return h('section'); }
+  }
+  class Post extends Component<any> {
+    render() { return h('textarea'); }
+  }
+  // Steam's `@bind` methods are lazy prototype getters that bind on first access.
+  let bindingGetterCalls = 0;
+  Object.defineProperty(Announcement.prototype, 'OnViewThread', {
+    configurable: true,
+    get() { bindingGetterCalls++; return () => {}; },
+  });
+  const feedManager = new FeedManager();
+  const native = { Section, PostTextEntry: Post, Announcement } as unknown as NativeBindings;
+  const cleanup = registerActivityComponents(feedManager, native);
+  try {
+    expect(bindingGetterCalls).toBe(0);
+    expect('LoadMyVoteInformation' in Announcement.prototype).toBe(false);
+    expect('ShowOptionsContextMenu' in Announcement.prototype).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(Announcement.prototype, 'OnRateUpClicked')).toBe(true);
+  } finally {
+    cleanup();
+    feedManager.dispose();
+  }
+  expect('componentDidUpdate' in Announcement.prototype).toBe(false);
+});

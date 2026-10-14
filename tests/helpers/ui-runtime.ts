@@ -69,11 +69,42 @@ Object.assign(globalThis, {
 // React's input-event detection needs the browser globals before initialization.
 export const { createRoot } = await import('react-dom/client');
 export const discoveryDispatcher: Record<string, any> = {};
+
+/** Millennium's tree search: depth-first over the walkable keys of every object. */
+function findInTree(node: any, filter: (element: any) => boolean, { walkable }: { walkable?: string[] } = {}): any {
+  if (!node || typeof node !== 'object')
+    return null;
+  if (filter(node))
+    return node;
+  const children = Array.isArray(node) ? node : (walkable ?? Object.keys(node)).map(key => node[key]);
+  for (const child of children) {
+    const found = findInTree(child, filter, { walkable });
+    if (found)
+      return found;
+  }
+  return null;
+}
+const findInReactTree = (node: any, filter: (element: any) => boolean) =>
+  findInTree(node, filter, { walkable: ['props', 'children', 'child', 'sibling'] });
+
+/** Records DevTools output of Millennium's Logger. */
+export const loggerOutput: { level: string; args: unknown[] }[] = [];
+class MockLogger {
+  log = (...args: unknown[]) => { loggerOutput.push({ level: 'log', args }); };
+  debug = (...args: unknown[]) => { loggerOutput.push({ level: 'debug', args }); };
+  warn = (...args: unknown[]) => { loggerOutput.push({ level: 'warn', args }); };
+  error = (...args: unknown[]) => { loggerOutput.push({ level: 'error', args }); };
+}
+
 mock.module('millennium', () => ({
   definePlugin: (initialize: () => unknown) => initialize,
   findClassModule: (filter: (value: any) => boolean) => runtime.nativeClassCandidates.find(filter),
-  findModule: (filter: (value: any) => boolean) =>
-    runtime.libraryModule && filter(runtime.libraryModule) ? runtime.libraryModule : undefined,
+  findModuleDetailsByExport: (filter: (value: any, name?: string) => boolean) => {
+    const match = Object.entries(runtime.libraryModule ?? {}).find(([name, value]) => filter(value, name));
+    return match
+      ? [runtime.libraryModule, match[1], match[0], 'library']
+      : [undefined, undefined, undefined, undefined];
+  },
   getReactInstance: () => undefined,
   applyHookStubs: () => { runtime.savedDispatcher = { ...discoveryDispatcher }; return discoveryDispatcher; },
   removeHookStubs: () => {
@@ -109,6 +140,9 @@ mock.module('millennium', () => ({
       description && h('div', { className: 'DialogLabelExplainer' }, description));
   },
   findModuleExport: (filter: (value: unknown) => boolean) => runtime.nativeModuleCandidates.find(filter),
+  findInTree,
+  findInReactTree,
+  Logger: MockLogger,
   Toggle: ({ value, disabled, onChange }: { value: boolean; disabled?: boolean; onChange(checked: boolean): void }) =>
     h('button', { type: 'button', role: 'checkbox', 'aria-checked': value, disabled, onClick: () => onChange(!value) }),
   DialogCheckbox: ({ label, checked, disabled, onChange, className }: MockToggleFieldProps & { className?: string }) =>
