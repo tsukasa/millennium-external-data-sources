@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { registerActivityStore } from '../frontend/steam/activity-store';
 import type { NewsItem } from '../frontend/feed';
 import type { NativeBindings } from '../frontend/steam/news-discovery';
-import type { FeedManager } from '../frontend/feed/manager';
+import { FeedManager } from '../frontend/feed/manager';
 import type { FeedSourceSettings } from '../frontend/feed/types';
 
 const appId = 4066412613;
@@ -74,6 +74,7 @@ test('activity store shares feed days without Steam requests and restores native
         return () => cacheListeners.delete(listener);
       },
     },
+    hasFeed: FeedManager.prototype.hasFeed,
   } as unknown as FeedManager;
   const native = {
     EventModel, ActivityEvent, language: 0, imageQueryKey: ['image', 'probe'], probeGid: 'probe',
@@ -143,6 +144,7 @@ test('cold activity store publishes feed updates for several shortcuts', () => {
         return () => cacheListeners.delete(listener);
       },
     },
+    hasFeed: FeedManager.prototype.hasFeed,
   } as unknown as FeedManager;
   const native = {
     EventModel, ActivityEvent, language: 0, imageQueryKey: ['image', 'probe'], probeGid: 'probe',
@@ -204,6 +206,7 @@ test('activity cleanup preserves foreign entries and later method wrappers', asy
       peekLast: () => [item],
       subscribe(listener: () => void) { listeners.add(listener); return () => listeners.delete(listener); },
     },
+    hasFeed: FeedManager.prototype.hasFeed,
   } as unknown as FeedManager;
   const native = {
     EventModel, ActivityEvent, language: 0, imageQueryKey: ['image', 'probe'], probeGid: 'probe',
@@ -282,6 +285,7 @@ test('activity installation failure restores hooks, subscriptions and partial fe
         return () => cacheListeners.delete(listener);
       },
     },
+    hasFeed: FeedManager.prototype.hasFeed,
   } as unknown as FeedManager;
   const native = {
     EventModel: FailingModel, ActivityEvent, language: 0,
@@ -330,6 +334,7 @@ test('activity sync rebuilds only apps whose feed items changed', () => {
         return () => cacheListeners.delete(listener);
       },
     },
+    hasFeed: FeedManager.prototype.hasFeed,
   } as unknown as FeedManager;
   const built: string[] = [];
   const native = {

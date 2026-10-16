@@ -1,7 +1,6 @@
 import type { ActivityComponent } from './news-types';
 import type { FeedManager } from '../feed/manager';
 import type { NativeBindings } from './news-discovery';
-import { isNonSteamId } from './client';
 import { MethodHooks } from './method-hooks';
 import { findInTree, findModuleExport } from 'millennium';
 import { EXTERNAL_NEWS_PREFIX } from '../constants';
@@ -32,7 +31,7 @@ function elementFor(instance: ActivityComponent): HTMLElement | undefined {
 
 /** Remove posting controls and disable Steam actions on native feed cards. */
 export function registerActivityComponents(feedManager: FeedManager, native: NativeBindings): () => void {
-  const configured = (appId: number) => isNonSteamId(appId) && !!feedManager.sources[String(appId)]?.url;
+  const configured = (appId: number) => feedManager.hasFeed(appId);
   const sectionProto = native.Section.prototype;
   const postProto = native.PostTextEntry.prototype;
   const announcementProto = native.Announcement.prototype;
@@ -83,6 +82,20 @@ export function registerActivityComponents(feedManager: FeedManager, native: Nat
 
     rating.inert = true;
     rating.setAttribute('aria-hidden', 'true');
+  };
+
+  /** Forget elements of an unmounting component; React discards them, so nothing needs restoring. */
+  const release = (instance: ActivityComponent) => {
+    const element = elementFor(instance);
+
+    if (!element)
+      return;
+
+    markedSections.delete(element);
+
+    const rating = element.querySelector<HTMLElement>('.RatingBar');
+    if (rating)
+      markedRatings.delete(rating);
   };
 
   const cleanup = () => {
@@ -144,6 +157,15 @@ export function registerActivityComponents(feedManager: FeedManager, native: Nat
       hooks.wrap(announcementProto, name, (original, instance) => {
         const result = original();
         markRating(instance);
+
+        return result;
+      });
+    }
+
+    for (const proto of [sectionProto, announcementProto]) {
+      hooks.wrap(proto, 'componentWillUnmount', (original, instance) => {
+        const result = original();
+        release(instance);
 
         return result;
       });

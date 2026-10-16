@@ -53,7 +53,7 @@ function calendarDateSeconds(date: CalendarDate): number {
 
 /** Publish company overrides while delegating other fields to live native app data. */
 function registerCompanyAssociations(manager: GameDetailsManager): () => void {
-  const hooks = new MethodHooks();
+  let hooks = new MethodHooks();
   const published = new Map<number, { original: AppData; view: AppData }>();
 
   let refresh = () => {};
@@ -161,7 +161,18 @@ function registerCompanyAssociations(manager: GameDetailsManager): () => void {
       }
     };
 
-    refresh();
+    try {
+      refresh();
+    } catch (error) {
+      // Leave Steam unpatched so the next attempt does not stack wrappers.
+      // Restored hooks stay stopped, so the retry needs a fresh set.
+      hooks.restore();
+      hooks = new MethodHooks();
+      restoreCache();
+      published.clear();
+      refresh = restoreCache = () => {};
+      throw error;
+    }
 
     return true;
   };
@@ -206,7 +217,8 @@ function installBigPictureFilters(hooks: MethodHooks): void {
 const LOCAL_TAG_COLLECTION_ERROR = 'Collections with custom tags cannot be saved to Steam Cloud. '
   + 'Use these tags in Library Filters locally.';
 
-function installLocalTagActions(hooks: MethodHooks): void {
+/** Returns whether both guards are installed, so custom tag IDs may be published. */
+function installLocalTagActions(hooks: MethodHooks): boolean {
   const collections = steam().collectionStore;
 
   if (collections?.NewUnsavedCollection) {
@@ -227,14 +239,19 @@ function installLocalTagActions(hooks: MethodHooks): void {
 
   if (Filter) {
     // Steam's "Search the Store" link must never include our local tag IDs.
-    hooks.wrap(Filter.prototype, 'GetTagsString', (_original, filter) => {
-      if (filter.searchText.length)
-        return '';
+    hooks.wrap(Filter.prototype, 'GetTagsString', (original, filter) => {
+      const options = filter.GetAllSelectedOptions().map(({ option }) => option);
 
-      const steamTags = filter.GetAllSelectedOptions().map(({ option }) => option).filter(option => option >= 0);
-      return `?tags=${steamTags.join(',')}`;
+      // Keep Steam's (and other plugins') behavior unless a custom tag is selected.
+      if (options.every(option => option >= 0))
+        return original();
+
+      // Steam links searches without tags.
+      return filter.searchText.length ? '' : `?tags=${options.filter(option => option >= 0).join(',')}`;
     });
   }
+
+  return !!collections?.NewUnsavedCollection && !!Filter;
 }
 
 function createOverviewView(original: AppOverview, details: GameDetails, tags: number[] | undefined,
@@ -302,9 +319,7 @@ function registerOverviewDetails(manager: GameDetailsManager): () => void {
     const tagMaps = new Set<Record<number, string>>();
     const hooks = new MethodHooks();
     let publishing = false;
-
-    installBigPictureFilters(hooks);
-    installLocalTagActions(hooks);
+    let localTagsGuarded = false;
 
     const cacheTagNames = () => {
       const names = store.m_mapStoreTagLocalization;
@@ -323,9 +338,13 @@ function registerOverviewDetails(manager: GameDetailsManager): () => void {
       // Delegate every other field to the original overview so plugins that
       // finish asynchronous updates on it (such as playtime) remain visible.
       original.__cachedReleaseYearString = undefined;
-      const tags = details.tags?.map(name => {
+      const tags = details.tags?.flatMap(name => {
         if (typeof name === 'number')
-          return name;
+          return [name];
+
+        // Unguarded custom IDs could reach Store links or Steam Cloud; keep only Steam's own tags.
+        if (!localTagsGuarded)
+          return [];
 
         let id = tagIds.get(name);
 
@@ -341,7 +360,7 @@ function registerOverviewDetails(manager: GameDetailsManager): () => void {
           tagNames.set(id, name);
         }
 
-        return id;
+        return [id];
       });
 
       cacheTagNames();
@@ -434,16 +453,32 @@ function registerOverviewDetails(manager: GameDetailsManager): () => void {
     // Remote disconnects can update the store again after the native notification.
     // Resync after every processed library update, including that final replacement.
     const collections = steam().collectionStore;
-    if (collections) {
-      hooks.wrap(collections, 'OnAppOverviewChange', (original) => {
-        const result = original();
-        if (!publishing)
-          onAppOverviewChange();
-        return result;
-      });
-    }
+    let unsubscribeOverview: () => void;
+    try {
+      installBigPictureFilters(hooks);
+      localTagsGuarded = installLocalTagActions(hooks);
 
-    const unsubscribeOverview = subscribeToOverviewChanges(SteamClient.Apps, onAppOverviewChange);
+      // shortcut: no retry for late guard modules (present on cold start as of 2026-10);
+      // retry if Steam starts lazy-loading them.
+      if (!localTagsGuarded)
+        log.error('Custom tags are disabled: Steam collection or filter module not found');
+
+      if (collections) {
+        hooks.wrap(collections, 'OnAppOverviewChange', (original) => {
+          const result = original();
+          if (!publishing)
+            onAppOverviewChange();
+          return result;
+        });
+      }
+
+      unsubscribeOverview = subscribeToOverviewChanges(SteamClient.Apps, onAppOverviewChange);
+    } catch (error) {
+      // Leave Steam unpatched so the next attempt does not stack wrappers.
+      stopped = true;
+      hooks.restore();
+      throw error;
+    }
     const unsubscribe = manager.subscribe(safeSync);
     safeSync();
 

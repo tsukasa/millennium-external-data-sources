@@ -175,7 +175,7 @@ function installLayoutIntegration(feedManager: FeedManager): (() => void) | unde
     // Big Picture gates Activity on GetSections; leave Steam's memoized Set untouched.
     hooks.wrap(layoutClass.prototype, 'GetSections', (original, _instance, [overview]) => {
       const sections = original();
-      return sections?.has('nonsteam') && feedManager.sources[String(overview.appid)]?.url
+      return sections?.has('nonsteam') && feedManager.hasFeed(overview.appid)
         ? new Set([...sections, 'activityrollup', 'activity'])
         : sections;
     });

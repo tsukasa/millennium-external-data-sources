@@ -1,6 +1,6 @@
 import type { NativeEventModel } from './news-types';
-import { EXTERNAL_NEWS_PREFIX, EXTERNAL_NEWS_MAX_AGE, EXTERNAL_NEWS_DEFAULT_MAX_ITEMS } from '../constants';
-import { createExternalNewsModels } from './news-events';
+import { EXTERNAL_NEWS_MAX_AGE, EXTERNAL_NEWS_DEFAULT_MAX_ITEMS } from '../constants';
+import { createExternalNewsModels, externalGid } from './news-events';
 import type { NewsItem } from '../feed';
 import type { NativeBindings } from './news-discovery';
 import type { FeedManager } from '../feed/manager';
@@ -27,7 +27,7 @@ function selectVisibleItems(items: NewsItem[], appId: string, oldest: number, li
   const recent = items.filter(item => item.date !== null && item.date >= oldest && !removed.has(item.url));
   // Persistent removals fill vacancies; temporary hiding does not change the cap.
   const capped = limit === 0 ? recent : recent.slice(0, limit);
-  return capped.filter(item => !hidden.has(`${EXTERNAL_NEWS_PREFIX}${appId}:${item.gid}`));
+  return capped.filter(item => !hidden.has(externalGid(appId, item.gid)));
 }
 
 /** Builds the synthetic event list and tracks its article URLs for Steam actions. */
@@ -105,7 +105,8 @@ export function createWhatsNewEvents(feedManager: FeedManager, native: NativeBin
         }
       }
 
-      return events.sort((a, b) => b.postTime - a.postTime);
+      // GetWhatsNewEvents sorts these together with Steam's own events.
+      return events;
     },
   };
 }

@@ -90,6 +90,43 @@ test('native activity controls are removed, actions disabled and later plugin wr
   }
 });
 
+test('unmounted activity elements are released while native unmount handlers still run', async () => {
+  document.body.replaceChildren();
+  const unmounted: string[] = [];
+  class Post extends Component<any> {
+    render() { return null; }
+  }
+  class Announcement extends Component<any> {
+    componentWillUnmount() { unmounted.push('announcement'); }
+    render() { return h('div', null, h('div', { className: 'RatingBar' }, 'Vote')); }
+  }
+  class Section extends Component<any> {
+    componentWillUnmount() { unmounted.push('section'); }
+    render() { return h('section', null, h(Announcement, { event: { externalNewsItem: {} } })); }
+  }
+  const feedManager = new FeedManager();
+  feedManager.sources[id] = { url, showFeedInWhatsNew: true };
+  const native = { Section, PostTextEntry: Post, Announcement } as unknown as NativeBindings;
+  const cleanup = registerActivityComponents(feedManager, native);
+  const root = createRoot(document.body);
+  try {
+    await act(async () => root.render(h(Section, { appid: Number(id) })));
+    const section = document.querySelector('section')!;
+    const rating = document.querySelector<HTMLElement>('.RatingBar')!;
+    expect(rating.inert).toBe(true);
+    await act(async () => root.render(null));
+    expect(unmounted).toEqual(['section', 'announcement']);
+    // Released elements are no longer tracked, so plugin cleanup leaves the detached nodes alone.
+    cleanup();
+    expect(rating.inert).toBe(true);
+    expect(section.hasAttribute('data-external-news-activity')).toBe(true);
+  } finally {
+    cleanup();
+    await act(async () => root.unmount());
+    feedManager.dispose();
+  }
+});
+
 test('announcement classes without vote loading keep their own method set', () => {
   // Newer builds load votes in an observer wrapper; the class has no LoadMyVoteInformation.
   class Announcement extends Component<any> {

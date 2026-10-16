@@ -135,7 +135,7 @@ export function registerActivityStore(feedManager: FeedManager, native: NativeBi
   const synced = new Map<number, { activity: NativeAppActivity; items: NewsItem[] }>();
   let disposed = false;
 
-  const configured = (appId: number) => isNonSteamId(appId) && !!feedManager.sources[String(appId)]?.url;
+  const configured = (appId: number) => feedManager.hasFeed(appId);
 
   const hooks = new MethodHooks();
   let unsubscribeFeedManager: (() => void) | undefined;

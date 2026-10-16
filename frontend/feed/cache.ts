@@ -2,7 +2,8 @@ import { decodeResponse } from '../transport';
 import { EXTERNAL_NEWS_DEFAULT_FETCH_INTERVAL } from '../constants';
 import { parseFeed } from './parser';
 import { notifyListeners } from '../listeners';
-import type { NewsItem, FeedResponse, FeedParseStats } from './types';
+import type { NewsItem, FeedResponse } from './types';
+import { log } from '../logger';
 
 interface CacheEntry {
   time: number;
@@ -19,7 +20,6 @@ export class FeedCache {
   constructor(
     private fetcher: (appId: string) => Promise<string>,
     private now = Date.now,
-    private onParsed?: (stats: FeedParseStats) => void,
   ) {}
 
   setRefreshInterval(minutes: number) {
@@ -84,11 +84,7 @@ export class FeedCache {
 
       const start = performance.now();
       const items = parseFeed(response.xml, response.url);
-      try {
-        this.onParsed?.({ appId, durationMs: performance.now() - start, itemCount: items.length });
-      } catch {
-        /* Diagnostics must not prevent a parsed feed from being cached. */
-      }
+      log.info(`Parsed feed for ${appId}: ${items.length} items in ${(performance.now() - start).toFixed(1)} ms`);
 
       if (this.pending.get(url) === request) {
         this.entries.set(url, { time: this.now(), items });

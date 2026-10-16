@@ -186,16 +186,27 @@ test('feed URL saves valid input without buttons and clears through the clear ac
     expect(runtime.saved[id]).toBe('https://example.com/delayed');
     expect(document.querySelector('[role="status"]')?.textContent).toBe('Feed settings saved.');
 
+    const toggle = document.querySelector<HTMLButtonElement>('[role="checkbox"]')!;
+    const dropdown = document.querySelector<HTMLSelectElement>('select')!;
+    await act(async () => { toggle.click(); await tick(); });
+    await selectOption(dropdown, '5');
+    expect(runtime.shown[id]).toBe(false);
+
     await act(async () => { document.querySelector<HTMLElement>('.DialogInput_ClearAction')!.click(); await tick(); });
     expect(input().value).toBe('');
     expect(runtime.saved[id]).toBeUndefined();
     expect(document.querySelector('[role="alert"]')).toBeNull();
     expect(document.querySelector('.DialogInput_ClearAction')).toBeNull();
+    // Clearing removes the saved options, so the controls must show the defaults the next save uses.
+    expect(toggle.getAttribute('aria-checked')).toBe('true');
+    expect(dropdown.value).toBe('3');
 
     // Closing the page saves a URL that is still waiting for the delay.
     await type(url);
     await act(async () => { root.unmount(); await tick(); });
     expect(runtime.saved[id]).toBe(url);
+    expect(runtime.shown[id]).toBe(true);
+    expect(feedManager.sources[id]?.maxItemsFromFeedInWhatsNew).toBe(3);
   } finally {
     feedManager.dispose();
   }

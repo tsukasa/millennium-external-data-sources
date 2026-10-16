@@ -1,6 +1,6 @@
 {
   "name": "io.tsukasa.external-data-sources",
-  "version": "0.1.16",
+  "version": "0.1.17",
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@steambrew/starlight": "^1.1.6",

@@ -63,6 +63,7 @@ test('native models keep summaries short, preload images and retain dates', asyn
     location: { href: 'https://steamloopback.host/library/home' },
     appStore: { GetAppOverviewByAppID: () => ({ appid: 3900360037 }) },
     appDetailsStore: { GetHeroImages: () => ({ rgHeroImages: background }) },
+    App: { m_CurrentUser: { strSteamID: '76561197960356529' } },
   };
   try {
     const fallbackEvents = createExternalNewsEvents({ ...bindings, sharedClient: withBackground }, '3900360037', items);
@@ -79,6 +80,10 @@ test('native models keep summaries short, preload images and retain dates', asyn
       const imageKey = bindings.imageQueryKey.map(value => value === bindings.probeGid ? gid : value);
       expect(withBackground.data.get(JSON.stringify(imageKey))).toEqual(background);
       expect(withBackground.data.get(JSON.stringify(['useFallbackArtworkScreenshot', gid]))).toBeNull();
+      // Steam's vote observer must find "no vote" cached, or it queries Steam with the synthetic GID.
+      const voteKey = JSON.stringify(['GetClanAnnouncementVoteForUser', 90801, gid]);
+      expect(withBackground.data.has(voteKey)).toBe(true);
+      expect(withBackground.data.get(voteKey)).toBeNull();
     }
   } finally {
     (globalThis as any).window = previousWindow;

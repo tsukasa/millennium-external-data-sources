@@ -1,5 +1,5 @@
 import { cloneElement, isValidElement, useSyncExternalStore, type ComponentType, type ReactNode } from 'react';
-import { isNonSteamId, type AppOverview } from './client';
+import type { AppOverview } from './client';
 import type { FeedManager } from '../feed/manager';
 
 export interface LayoutClasses {
@@ -44,9 +44,7 @@ export function createLibraryLayout(original: LayoutRenderer, Seek: SeekTarget, 
 
   return function ExternalLibraryLayout(props) {
     useSyncExternalStore(subscribe, snapshot);
-    const appId = String(props.overview.appid);
-    const url = feedManager.sources[appId]?.url;
-    const enabled = !!url && isNonSteamId(props.overview.appid) && props.setSections.has('nonsteam');
+    const enabled = feedManager.hasFeed(props.overview.appid) && props.setSections.has('nonsteam');
 
     // Let Steam create its own SeekTargets. The source-backed sections are
     // added before the native renderer constructs the left column.

@@ -315,6 +315,18 @@ testWhatsNew("What's New cleanup preserves later plugins' wrappers and stops int
   }
 });
 
+test('What\'s New installation waits while Steam\'s stores are not loaded', () => {
+  const previousStore = (window as any).libraryEventStore;
+  (window as any).libraryEventStore = undefined;
+  const feedManager = new FeedManager();
+  try {
+    expect(registerWhatsNew(feedManager, {} as NativeBindings)).toBeUndefined();
+  } finally {
+    (window as any).libraryEventStore = previousStore;
+    feedManager.dispose();
+  }
+});
+
 test('What\'s New installation failure removes partial hooks, popup subscriptions and styles', () => {
   const previousStore = (window as any).libraryEventStore;
   const previousNav = (window as any).tempNavStore;

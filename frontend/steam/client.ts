@@ -99,6 +99,7 @@ interface SteamGlobals {
   tempNavStore?: NavigationStore;
   appDetailsStore?: AppDetailsStore;
   g_PopupManager?: PopupManager;
+  App?: { m_CurrentUser?: { strSteamID?: string } };
 }
 
 // Millennium's Window declaration exposes a different subset of the private

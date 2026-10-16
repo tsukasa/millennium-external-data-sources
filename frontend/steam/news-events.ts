@@ -12,6 +12,18 @@ export interface ExternalNewsEvent extends NativeActivityEvent {
   externalNewsItem: NewsItem;
 }
 
+/** The GID Steam hands back for a synthetic news item (clicks, removals). */
+export function externalGid(appId: string, gid: string): string {
+  return `${EXTERNAL_NEWS_PREFIX}${appId}:${gid}`;
+}
+
+/** The signed-in user's 32-bit account ID, which Steam uses in per-user query keys. */
+function currentAccountId(): number | undefined {
+  const steamId = steam().App?.m_CurrentUser?.strSteamID;
+
+  return steamId && /^\d+$/.test(steamId) ? Number(BigInt(steamId) - 76561197960265728n) : undefined;
+}
+
 /** Converts a potentially relative Steam URL to an absolute URL. */
 function getAbsoluteSteamUrlFromString(inputUrl: string | undefined): string | undefined {
   return inputUrl ? new URL(inputUrl, steam().location?.href).href : inputUrl;
@@ -48,7 +60,7 @@ export function createExternalNewsModels(native: NativeBindings, appId: string, 
     // characters per card and can stall the library for many seconds.
     const summary = native.EventModel.GenerateSummaryFromText(item.contents);
 
-    eventModel.GID = `${EXTERNAL_NEWS_PREFIX}${appId}:${item.gid}`;
+    eventModel.GID = externalGid(appId, item.gid);
     eventModel.appid = Number(appId);
     eventModel.type = CLAN_NEWS_EVENT_TYPE;
     eventModel.name = new Map([
@@ -102,6 +114,12 @@ export function createExternalNewsEvents(native: NativeBindings, appId: string,
         ['useFallbackArtworkScreenshot', eventModel.GID],
         null
       );
+
+      // The card's vote observer queries Steam with AnnouncementGID; cache "no vote" so it never runs.
+      const accountId = currentAccountId();
+      if (accountId)
+        client.setQueryData(['GetClanAnnouncementVoteForUser', accountId, eventModel.GID], null);
+
       return eventModel;
     };
 

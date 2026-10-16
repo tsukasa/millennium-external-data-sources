@@ -192,7 +192,19 @@ test('configured release dates survive Steam overview updates and restore native
       listeners.add(listener);
     },
   } } });
-  Object.assign(window, { appStore: store });
+  // Custom tags are only published once their local-only guards are installed.
+  class Filter {
+    searchText = '';
+    GetAllSelectedOptions() { return []; }
+    GetTagsString() { return ''; }
+  }
+  const previousCollections = (window as any).collectionStore;
+  const previousModules = runtime.nativeModuleCandidates;
+  runtime.nativeModuleCandidates = [...previousModules, Filter];
+  Object.assign(window, { appStore: store, collectionStore: {
+    OnAppOverviewChange() {},
+    NewUnsavedCollection: () => new (class { async Save() { return true; } })(),
+  } });
   const update = store.UpdateAppOverview;
   const localization = store.GetLocalizationForStoreTag;
   const cleanup = registerGameDetails(manager);
@@ -267,13 +279,14 @@ test('configured release dates survive Steam overview updates and restore native
     const again = registerGameDetails(manager);
     expect(registrations).toBe(1);
     again();
-    Object.assign(window, { appStore: previous });
+    runtime.nativeModuleCandidates = previousModules;
+    Object.assign(window, { appStore: previous, collectionStore: previousCollections });
     Object.assign(globalThis, { SteamClient: previousClient });
     manager.dispose();
   }
 });
 
-async function setupShortcutFilters(binding: string) {
+async function setupShortcutFilters(binding: string, { failSubscription = false, withoutFilter = false } = {}) {
   class Overview {
     m_setStoreTags = new Set([5]);
     rt_original_release_date = 0;
@@ -313,8 +326,12 @@ async function setupShortcutFilters(binding: string) {
   class Filter {
     searchText = '';
     options = [{ option: 19 }, { option: -1 }];
+    suffix = '';
     GetAllSelectedOptions() { return this.options; }
-    GetTagsString() { return `?tags=${this.options.map(({ option }) => option).join(',')}`; }
+    // Mirrors Steam: searches link without tags.
+    GetTagsString() {
+      return this.searchText.length ? '' : `?tags=${this.options.map(({ option }) => option).join(',')}${this.suffix}`;
+    }
   }
   class Collection {
     constructor(public internalAppFilter?: Filter) {}
@@ -345,10 +362,14 @@ async function setupShortcutFilters(binding: string) {
     },
   };
   window.SP_JSX_FACTORY = jsxRuntime;
-  runtime.nativeModuleCandidates = [...previousModules, Filter];
+  runtime.nativeModuleCandidates = withoutFilter ? previousModules : [...previousModules, Filter];
   const notifications = new Set<() => void>();
   Object.assign(globalThis, { SteamClient: { ...previousClient, Apps: {
-    RegisterForAppOverviewChanges: (callback: () => void) => notifications.add(callback),
+    RegisterForAppOverviewChanges: (callback: () => void) => {
+      if (failSubscription)
+        throw new Error('Steam API changed');
+      notifications.add(callback);
+    },
   } } });
   Object.assign(window, { appStore: store, collectionStore: collections });
   runtime.savedDetails = { [id]: { tags: [19, 'Custom'] } };
@@ -372,6 +393,36 @@ async function setupShortcutFilters(binding: string) {
     },
   };
 }
+
+test('custom tags stay unpublished when a local-only guard cannot be installed', async () => {
+  const context = await setupShortcutFilters('lazy', { withoutFilter: true });
+  const { store } = context;
+  try {
+    // Without the Store-link guard, a negative ID could leave the client; Steam's own tags still apply.
+    const view = store.GetAppOverviewByAppID(Number(id))!;
+    expect(view.GetStoreTags()).toEqual(new Set([5, 19]));
+    expect(view.BHasStoreTag(19)).toBe(true);
+    expect(view.BHasStoreTag(CUSTOM_TAG)).toBe(false);
+  } finally {
+    context.dispose();
+  }
+});
+
+test('a failed overview installation removes the hooks it already installed', async () => {
+  const context = await setupShortcutFilters('lazy', { failSubscription: true });
+  const { Filter, collections, jsxRuntime, notifications } = context;
+  try {
+    // A retry must start from native methods instead of stacking another set of wrappers.
+    expect(notifications.size).toBe(0);
+    const grid = jsxRuntime.jsx(null, { collection: { id: 'deck-desktop-apps' }, ignoreFiltering: true });
+    expect(grid.props.ignoreFiltering).toBe(true);
+    expect(new Filter().GetTagsString()).toBe('?tags=19,-1');
+    expect(String(collections.OnAppOverviewChange)).toContain('for (const app of updated)');
+    expect(await collections.NewUnsavedCollection('', new Filter()).Save()).toBe(true);
+  } finally {
+    context.dispose();
+  }
+});
 
 test('remote library disconnect reapplies metadata after the final native overview update', async () => {
   const context = await setupShortcutFilters('lazy');
@@ -458,6 +509,10 @@ test.each(BINDINGS)('%s bound filters keep custom tags out of Store links and cl
     filter.options = [{ option: 19 }];
     filter.searchText = '';
     expect(filter.GetTagsString()).toBe('?tags=19');
+    // Native-only selections keep whatever Steam (or an earlier plugin) returns.
+    filter.suffix = '&native=1';
+    expect(filter.GetTagsString()).toBe('?tags=19&native=1');
+    filter.suffix = '';
     expect(await collection.Save()).toBe(true);
     expect(counters.cloudWrites).toBe(1);
     filter.options.push({ option: -1 });
@@ -805,6 +860,44 @@ test('company arrays remain in Steam associations through edits and native cache
   }
 });
 
+test('a failed company installation removes its hook and a later retry applies overrides', async () => {
+  const previous = (window as any).appDetailsStore;
+  type AppData = { associationData: { rgDevelopers: { strName: string; strURL: string }[] } };
+  const native = (name: string): AppData => ({ associationData: { rgDevelopers: [{ strName: name, strURL: '' }] } });
+  const cache = new Map([[Number(id), native('Native Studio')]]);
+  let failures = 1;
+  const store = {
+    m_mapAppData: cache,
+    GetAppData(appId: number) {
+      if (failures-- > 0)
+        throw new Error('Steam API changed');
+      return cache.get(appId);
+    },
+  };
+  const originalGet = store.GetAppData;
+  const developers = () => store.GetAppData(Number(id))!.associationData.rgDevelopers.map(value => value.strName);
+  Object.assign(window, { appDetailsStore: store });
+  const manager = new GameDetailsManager();
+  await manager.load();
+  await manager.set(id, 'developer', ['Studio']);
+  const cleanup = registerGameDetails(manager);
+  try {
+    // A retry must wrap the native method again instead of the previous wrapper.
+    expect(store.GetAppData).toBe(originalGet);
+    await new Promise(resolve => setTimeout(resolve, 1100));
+    expect(store.GetAppData).not.toBe(originalGet);
+    expect(developers()).toEqual(['Studio']);
+    // The retried hook must still intercept after Steam replaces its cached app data.
+    cache.set(Number(id), native('Replaced Studio'));
+    expect(developers()).toEqual(['Studio']);
+  } finally {
+    cleanup();
+    expect(store.GetAppData).toBe(originalGet);
+    Object.assign(window, { appDetailsStore: previous });
+    manager.dispose();
+  }
+});
+
 test('company overrides wait for Steam to load app data and publish outside the read path', async () => {
   const previous = (window as any).appDetailsStore;
   type Association = { strName: string; strURL: string };
@@ -916,4 +1009,26 @@ test('custom tag IDs are negative, derived from the name and stable across sessi
   expect(localTagId('Custom')).not.toBe(localTagId('custom'));
   for (const name of ['', 'Custom', 'Roguelike Deckbuilder', '日本語'])
     expect(Number.isSafeInteger(localTagId(name)) && localTagId(name) < 0).toBe(true);
+});
+
+test('game details changed while loading survive the older startup snapshot', async () => {
+  runtime.savedDetails = { [id]: { releaseDate: '2024-02-29' }, '2436693853': { developer: ['Studio'] } };
+  const original = backend.getGameDetails;
+  let release!: () => void;
+  const held = new Promise<void>(resolve => { release = resolve; });
+  backend.getGameDetails = async () => { const snapshot = await original(); await held; return snapshot; };
+  const manager = new GameDetailsManager();
+  try {
+    const loading = manager.load();
+    await tick();
+    await manager.clear(id);
+    await manager.set('2436693853', 'publisher', ['Publisher']);
+    release();
+    await loading;
+    expect(manager.details[id]).toBeUndefined();
+    expect(manager.details['2436693853']).toEqual({ developer: ['Studio'], publisher: ['Publisher'] });
+  } finally {
+    backend.getGameDetails = original;
+    manager.dispose();
+  }
 });

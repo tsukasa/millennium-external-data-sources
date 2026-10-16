@@ -80,7 +80,12 @@ export function ExternalNewsSource({ appId, manager }: ExternalNewsSourceProps) 
 
       return url
         ? run(() => manager.save(appId, url), 'saving', 'feedSettingsSaved')
-        : run(() => manager.clear(appId), 'clearing', 'feedSettingsCleared');
+        : run(async () => {
+          await manager.clear(appId);
+          // Clearing drops the options too; the next save uses the defaults shown here.
+          setShowInWhatsNew(true);
+          setMaxItems(EXTERNAL_NEWS_DEFAULT_MAX_ITEMS);
+        }, 'clearing', 'feedSettingsCleared');
     });
   }, [appId, manager, run]);
 

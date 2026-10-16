@@ -24,9 +24,3 @@ export interface FeedResponse {
   url: string;
   xml: string;
 }
-
-export interface FeedParseStats {
-  appId: string;
-  durationMs: number;
-  itemCount: number;
-}

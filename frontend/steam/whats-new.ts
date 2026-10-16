@@ -1,6 +1,7 @@
 import type { NativeEventModel } from './news-types';
 import { EXTERNAL_NEWS_PREFIX, POPUP_ACTIVITY, POPUP_DESKTOP_CLIENT_ACTIVITY } from '../constants';
 import { createWhatsNewEvents, type WhatsNewEvents } from './whats-new-events';
+import { externalGid } from './news-events';
 import { MethodHooks } from './method-hooks';
 import { isNonSteamId, openArticle, steam, type SteamSubscription } from './client';
 import type { NativeBindings } from './news-discovery';
@@ -142,7 +143,7 @@ export function registerWhatsNew(feedManager: FeedManager, native: NativeBinding
     || !store.LowerAppPriorityForApp
     || !navStore?.SetNavigator
     || !client.settingsStore?.clientSettings)
-    throw new Error('Steam What\'s New store is not available');
+    return undefined;
 
   const hooks = new MethodHooks();
   const externalEvents = createWhatsNewEvents(feedManager, native);
@@ -178,7 +179,7 @@ export function registerWhatsNew(feedManager: FeedManager, native: NativeBinding
 
       const item = feedManager.cache
         .peekLast(feedUrl)
-        ?.find(item => `${EXTERNAL_NEWS_PREFIX}${appId}:${item.gid}` === gid);
+        ?.find(item => externalGid(appId, item.gid) === gid);
 
       if (item)
         return item.url;

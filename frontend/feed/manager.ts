@@ -10,6 +10,7 @@ import {
 } from '../constants';
 import type { FeedSourceSettings, FeedSourceSettingsByAppId, GlobalFeedSettings } from './types';
 import { log } from '../logger';
+import { isNonSteamId } from '../steam/client';
 
 export class FeedManager {
   revision = 0;
@@ -21,17 +22,20 @@ export class FeedManager {
   private disposed = false;
   private listeners = new Set<() => void>();
   private loading?: Promise<void>;
+  /** Source changes made while loading; the loaded snapshot may predate them. */
+  private changesWhileLoading?: (() => void)[];
   private removalWrite: Promise<void> = Promise.resolve();
   private backgroundRefreshStarted = false;
   private refreshTimer?: ReturnType<typeof setTimeout>;
   private prefetching?: Promise<void>;
   private failedRefreshes = new Map<string, number>();
 
-  readonly cache = new FeedCache(id => backend.fetchFeed(id), Date.now, ({ appId, durationMs, itemCount }) => {
-    log.info(`Parsed feed for ${appId}: ${itemCount} items in ${durationMs.toFixed(1)} ms`);
-  });
+  readonly cache = new FeedCache(id => backend.fetchFeed(id));
 
   load(): Promise<void> {
+    if (!this.loading)
+      this.changesWhileLoading = [];
+
     return this.loading ||= Promise.all([
       backend.getFeedSources(),
       backend.getFeedRemovedItems(),
@@ -59,12 +63,14 @@ export class FeedManager {
           return [id, {
             url: entry.url || '',
             showFeedInWhatsNew: entry.showFeedInWhatsNew !== false,
-            maxItemsFromFeedInWhatsNew: typeof limit === 'number'
-              && Number.isInteger(limit) && limit >= 0 && limit <= EXTERNAL_NEWS_MAX_ITEMS
+            maxItemsFromFeedInWhatsNew: FeedManager.isValidMaxItemsValue(limit)
               ? limit : EXTERNAL_NEWS_DEFAULT_MAX_ITEMS,
           }];
         })
       );
+
+      this.changesWhileLoading?.forEach(change => change());
+      this.changesWhileLoading = undefined;
 
       this.feedRemovedItems = new Set(Array.isArray(removedItems)
         ? removedItems.filter((url): url is string => typeof url === 'string')
@@ -73,8 +79,14 @@ export class FeedManager {
       this.notify();
     }).catch(error => {
       this.loading = undefined;
+      this.changesWhileLoading = undefined;
       throw error;
     });
+  }
+
+  /** Whether a non-Steam app has a configured feed URL. */
+  hasFeed(appId: number): boolean {
+    return isNonSteamId(appId) && !!this.sources[String(appId)]?.url;
   }
 
   /**
@@ -97,6 +109,14 @@ export class FeedManager {
       && Number.isInteger(value)
       && value >= EXTERNAL_NEWS_MIN_CONCURRENT_FETCHES
       && value <= EXTERNAL_NEWS_MAX_CONCURRENT_FETCHES;
+  }
+
+  /** Validates a per-feed What's New item limit; 0 means unlimited. */
+  public static isValidMaxItemsValue(value: unknown): value is number {
+    return typeof value === 'number'
+      && Number.isInteger(value)
+      && value >= 0
+      && value <= EXTERNAL_NEWS_MAX_ITEMS;
   }
 
   /** Updates the plugin feed settings and restarts the background refresh timer. */
@@ -233,11 +253,9 @@ export class FeedManager {
       this.invalidateFeed(url, id);
     }
 
-    this.sources[id] = {
-      url,
-      showFeedInWhatsNew: showInWhatsNew,
-      maxItemsFromFeedInWhatsNew
-    };
+    this.changeSources(sources => {
+      sources[id] = { url, showFeedInWhatsNew: showInWhatsNew, maxItemsFromFeedInWhatsNew };
+    });
 
     this.notify();
 
@@ -245,6 +263,12 @@ export class FeedManager {
     // even when its game details page has never been opened.
     if (urlChanged)
       void this.cache.get(id, url).catch(() => {});
+  }
+
+  /** Applies a persisted change now and again over a loading snapshot that may predate it. */
+  private changeSources(change: (sources: Record<string, FeedSourceSettings>) => void): void {
+    change(this.sources);
+    this.changesWhileLoading?.push(() => change(this.sources));
   }
 
   private invalidateFeed(url: string, appId: string): void {
@@ -259,15 +283,19 @@ export class FeedManager {
   async clear(appId: string) {
     await backendWrite(() => backend.clearFeedSource(appId), getPluginI18nString('couldNotRemoveFeedSource'));
 
-    if (!Object.prototype.hasOwnProperty.call(this.sources, appId))
-      return;
+    const existed = Object.prototype.hasOwnProperty.call(this.sources, appId);
+    const url = this.sources[appId]?.url;
 
-    const url = this.sources[appId].url;
+    // Queue the removal even when it is not loaded yet; the snapshot may still contain it.
+    this.changeSources(sources => {
+      delete sources[appId];
+    });
+
+    if (!existed)
+      return;
 
     if (url)
       this.invalidateFeed(url, appId);
-
-    delete this.sources[appId];
 
     this.notify();
   }
@@ -277,22 +305,24 @@ export class FeedManager {
     await backendWrite(() => backend.setShowFeedInWhatsNew(appId, value),
       getPluginI18nString('couldNotSaveFeedSource'));
 
-    const source = this.sources[appId] ||= { url: '', showFeedInWhatsNew: true };
-    source.showFeedInWhatsNew = value;
+    this.changeSources(sources => {
+      (sources[appId] ||= { url: '', showFeedInWhatsNew: true }).showFeedInWhatsNew = value;
+    });
 
     this.notify();
   }
 
   /** Sets how many items of an AppID's feed may appear in "What's New"; 0 means unlimited. */
   async setMaxItemsFromFeedInWhatsNew(appId: string, value: number) {
-    if (!Number.isInteger(value) || value < 0 || value > EXTERNAL_NEWS_MAX_ITEMS)
+    if (!FeedManager.isValidMaxItemsValue(value))
       throw new Error(getPluginI18nString('couldNotSaveFeedSource'));
 
     await backendWrite(() => backend.setMaxItemsFromFeedInWhatsNew(appId, value),
       getPluginI18nString('couldNotSaveFeedSource'));
 
-    const source = this.sources[appId] ||= { url: '', showFeedInWhatsNew: true };
-    source.maxItemsFromFeedInWhatsNew = value;
+    this.changeSources(sources => {
+      (sources[appId] ||= { url: '', showFeedInWhatsNew: true }).maxItemsFromFeedInWhatsNew = value;
+    });
 
     this.notify();
   }

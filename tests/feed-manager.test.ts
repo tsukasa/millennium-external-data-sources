@@ -461,3 +461,30 @@ test('a failing subscriber neither rejects completed writes nor starves other su
     feedManager.dispose();
   }
 });
+
+test('changes made while loading survive the older startup snapshot', async () => {
+  runtime.saved = { [id]: url, [otherId]: url };
+  runtime.shown = {};
+  runtime.maxed = {};
+  const original = backend.getFeedSources;
+  let release!: () => void;
+  const held = new Promise<void>(resolve => { release = resolve; });
+  // Capture the snapshot first, then hold it back while the user edits.
+  backend.getFeedSources = async () => { const snapshot = await original(); await held; return snapshot; };
+  const feedManager = new FeedManager();
+  try {
+    const loading = feedManager.load();
+    await tick();
+    await feedManager.clear(id);
+    await feedManager.setShowFeedInWhatsNew(otherId, false);
+    release();
+    await loading;
+    expect(feedManager.sources[id]).toBeUndefined();
+    expect(feedManager.hasFeed(Number(id))).toBe(false);
+    // A partial change applies on top of the loaded entry instead of replacing it.
+    expect(feedManager.sources[otherId]).toEqual({ url, showFeedInWhatsNew: false, maxItemsFromFeedInWhatsNew: 3 });
+  } finally {
+    backend.getFeedSources = original;
+    feedManager.dispose();
+  }
+});

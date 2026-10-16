@@ -36,7 +36,7 @@ Custom tags work in local Library Filters. Saving a collection containing custom
 tag IDs to Steam Cloud is blocked, and those IDs are excluded from Store search
 links. Steam's normal actions on native games and collections remain available.
 
-In other words: Nothing leaves your machine.
+In other words: your settings and metadata stay on your machine. The only network traffic is fetching the feeds you configure and loading the images they reference.
 
 
 ## How to Install
@@ -54,8 +54,8 @@ In other words: Nothing leaves your machine.
 To configure a newsfeed for a non-Steam game, do the following:
 1. Right-click a non-Steam game and select **Properties** → **External Data Sources**.
 2. Enter a fully qualified HTTP or HTTPS URL for an RSS 2.0 or Atom 1.0 feed.
-3. Click **Save** to save the settings for the game and refresh the news view.
-4. Click **Clear** to remove the source and restore Steam's default behavior.
+3. The URL saves automatically once you stop typing or leave the field, and the news view refreshes.
+4. Empty the field (or use its clear button) to remove the source and restore Steam's default behavior.
 
 Note: You can save exactly one feed per shortcut AppID.
 
@@ -77,7 +77,7 @@ To configure game data, do the following:
 1. Right-click a non-Steam game and select **Properties** → **External Data Sources**.
 2. Scroll down to the **External Game Data** section.
 3. Set a release date or remove it by setting one field to "--".
-4. Add a developer or publisher by entering the name and clicking the "+" button.
+4. Add a developer or publisher by entering the name and pressing Enter.
 5. Add Steam store tags by typing a search term and selecting matching tags.
 6. For pseudo-tags you can simply enter a tag name and press enter.
 7. To remove a tag, click the "x" in its chip.

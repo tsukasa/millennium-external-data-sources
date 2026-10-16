@@ -72,9 +72,14 @@ function normalizeGameDetail(field: GameDetailField, value: unknown): string | S
 export class GameDetailsManager {
   details: Record<string, GameDetails> = {};
   private loading?: Promise<void>;
+  /** Detail changes made while loading; the loaded snapshot may predate them. */
+  private changesWhileLoading?: (() => void)[];
   private listeners = new Set<() => void>();
 
   load(): Promise<void> {
+    if (!this.loading)
+      this.changesWhileLoading = [];
+
     return this.loading ||= backend.getGameDetails().then(response => {
       const saved = decodeResponse<Record<string, unknown>>(response) || {};
       this.details = {};
@@ -89,9 +94,13 @@ export class GameDetailsManager {
           this.details[id] = details;
       }
 
+      this.changesWhileLoading?.forEach(change => change());
+      this.changesWhileLoading = undefined;
+
       this.notify();
     }).catch(error => {
       this.loading = undefined;
+      this.changesWhileLoading = undefined;
       throw error;
     });
   }
@@ -104,17 +113,19 @@ export class GameDetailsManager {
     await backendWrite(() => backend.setGameDetail(appId, field, encoded),
       getPluginI18nString('couldNotSaveGameDetails'));
 
-    const details = { ...this.details[appId] };
+    this.changeDetails(all => {
+      const details = { ...all[appId] };
 
-    if (normalized.length)
-      Object.assign(details, { [field]: normalized });
-    else
-      delete details[field];
+      if (normalized.length)
+        Object.assign(details, { [field]: normalized });
+      else
+        delete details[field];
 
-    if (Object.keys(details).length)
-      this.details[appId] = details;
-    else
-      delete this.details[appId];
+      if (Object.keys(details).length)
+        all[appId] = details;
+      else
+        delete all[appId];
+    });
 
     this.notify();
   }
@@ -122,11 +133,21 @@ export class GameDetailsManager {
   async clear(appId: string): Promise<void> {
     await backendWrite(() => backend.clearGameDetails(appId), getPluginI18nString('couldNotRemoveGameDetails'));
 
-    if (!Object.prototype.hasOwnProperty.call(this.details, appId))
-      return;
+    const existed = Object.prototype.hasOwnProperty.call(this.details, appId);
 
-    delete this.details[appId];
-    this.notify();
+    // Queue the removal even when it is not loaded yet; the snapshot may still contain it.
+    this.changeDetails(all => {
+      delete all[appId];
+    });
+
+    if (existed)
+      this.notify();
+  }
+
+  /** Applies a persisted change now and again over a loading snapshot that may predate it. */
+  private changeDetails(change: (all: Record<string, GameDetails>) => void): void {
+    change(this.details);
+    this.changesWhileLoading?.push(() => change(this.details));
   }
 
   subscribe(listener: () => void): () => void {
